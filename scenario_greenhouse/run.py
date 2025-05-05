@@ -1,9 +1,9 @@
 import model
 import pickle
-
+import tqdm as tqdm
 if __name__ == "__main__":
     model = model.GreenhouseModel(seed=0)  # Initialize the model with a seed
-    for i in range(10):  # Run the model for 3 steps
+    for i in tqdm.tqdm(range(500)):  # Run the model for 3 steps
         model.step()
     
     

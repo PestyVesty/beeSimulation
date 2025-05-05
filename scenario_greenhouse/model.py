@@ -6,6 +6,7 @@ Simulation-governed design and tuning of greenhouses for successful bee pollinat
 import mesa
 from agents import Bee, Plant, BeeBehavior
 from mesa.datacollection import DataCollector
+from shapely.geometry import LineString
 
 class GreenhouseModel(mesa.Model):
     def __init__(self, n_agents = 60, seed = None):
@@ -15,6 +16,12 @@ class GreenhouseModel(mesa.Model):
         self.space_width = 18 * 0.7 # 18 cells * 0.7 m = 12.6 m
         self.space_length = 72 * 0.7 # 72 cells * 0.7 m = 50.4 m
         self.space = mesa.space.ContinuousSpace(self.space_length, self.space_width, True) # Allowing agents to wrap around the edges
+        
+        # Declaring walls        
+        self.walls = [LineString([(0, 0), (0, self.space_width)]), 
+            LineString([(0, self.space_width), (self.space_length, self.space_width)]),
+            LineString([(self.space_length, self.space_width), (self.space_length, 0)]),
+            LineString([(self.space_length, 0), (0, 0)])]
         
         # Create plant agents within the environment
         self.create_plant_agents()
@@ -29,10 +36,13 @@ class GreenhouseModel(mesa.Model):
             agent_reporters={"Bee Positions" : "pos",
                              "Agent Type"    : "agent_type",
                              "unique_id"     : "unique_id",
-                             "Theta"         : "theta",},   
+                             "Theta"         : "theta",
+                             "Plot Code"     : lambda a: a.color_code()}   
         )
         
-        
+
+        # from pdb import set_trace as st
+        # st()
         self.datacollector.collect(self)
     
     def step(self):
@@ -56,8 +66,8 @@ class GreenhouseModel(mesa.Model):
             
             for j in range(60):
                 coord = (x + j * 0.7, y)
-                Plant(self, gender=gender, coord=coord)                         # NOTE: this creates the plant and places it in the space
-         
+                plant = Plant(self, gender=gender, coord=coord)                         # NOTE: this creates the plant and places it in the space
+                self.space.place_agent(plant, coord)                                   # NOTE: this places the plant in the space
         
     def create_bee_agents(self, n_agents):
         """
@@ -72,8 +82,8 @@ class GreenhouseModel(mesa.Model):
             theta = self.random.uniform(0, 360)
             
             beebehavior = BeeBehavior()                                                      
-            Bee(self, beebehavior, coord=coord, theta=theta)
-            
+            bee = Bee(self, beebehavior, coord=coord, theta=theta)
+            self.space.place_agent(bee, coord) 
             
     def get_plant_row_gender(self, char):
         return "male" if char == "M" else "female"
