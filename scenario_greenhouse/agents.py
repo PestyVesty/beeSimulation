@@ -9,10 +9,6 @@ Class for declaring bee and plant objects, and defining their behaviors
 NOTE: use self.random to get a random seeded number
 """
 
-#! last time left off:
-# bug: some bees are stuck in the wall and cannot move
-# Update plant status (pollinated, visited etc)
-# Update bee status (has pollen etc)
 
 class BeeBehavior():
     def __init__(self):
@@ -32,7 +28,6 @@ class BeeBehavior():
         # Busy foraging?
         # 1. No, is bee at destination? 
         if self.bee.forage_timer == 0:
-            
             # 2. Have a set destination?
             # 2. No, bee is at destination NOTE: check if bee is at destination by looking whether route is empty or not
             if self.bee.travel_route == []:
@@ -50,15 +45,21 @@ class BeeBehavior():
                 # 5. If bee is at destination?
                 # 5. Yes, check if there is any flower below it
                 if self.bee.travel_route == []:
-                    # 6. Is there a flower below it?
+                    # 6. Is there a flower below it? 
                     below = self.bee.model.space.get_neighbors(self.bee.pos, 0, include_center=True)
                     plant_agents = [agent for agent in below if isinstance(agent, Plant)]
-                    unvisited_plants = [plant for plant in plant_agents if not plant.visited]
+                    
+
+                    available_plants = [plant for plant in plant_agents if not plant.visited and plant.bee_on is None]
                     
                     # 6. Yes, and the flower is unvisited
-                    if unvisited_plants:
+                    if available_plants:
                         # 7. Start foraging
-                        self.bee.forager_time = self.bee.forage_timer_max
+                        self.bee.forage_timer = self.bee.forage_timer_max
+                        plant = available_plants[0]
+                        self.bee.on_plant = plant
+                        plant.bee_on = self.bee
+                        # self.bee.on_plant.visited = True     # Mark the flower as visited as soon as the bee lands on it, so that no other bee can visit it at the same time
                     
                     # 6. No, the flower is visited
                     else:
@@ -68,13 +69,29 @@ class BeeBehavior():
                 
         # 1. Yes, bee is at destination, decrement
         else:
-            self.bee.forager_time -= 1
-            if self.bee.forager_time == 0:
-                self.bee.pollen_timer = self.bee.pollen_timer_max
-        
+
+            self.bee.forage_timer -= 1
+            if self.bee.forage_timer == 0:
+                # Set pollen timer to max if the bee foraged from a male flower
+                if self.bee.on_plant.gender == "male":
+                    self.bee.pollen_timer = self.bee.pollen_timer_max
+                    self.bee.has_pollen = True
+                    self.bee.on_plant.has_pollen = False # Pollen is removed from the flower
+                    
+                # If the landed plant is female and the bee has pollen, pollinate the flower
+                if self.bee.on_plant.gender == "female":
+                    if self.bee.has_pollen:
+                        self.bee.on_plant.pollinated = True # Pollen remains on the flower
+                
+                self.bee.on_plant.visited = True
+                self.bee.on_plant.bee_on = None # Bee leaves the flower                
+                self.bee.on_plant = None        # The flower has no bee on it anymore
+                
         # Decrement pollen timer if greater than 0
         if self.bee.pollen_timer > 0:
             self.bee.pollen_timer -= 1
+            if self.bee.pollen_timer == 0:
+                self.bee.has_pollen = False
             
             
     def get_new_directions(self):
@@ -124,37 +141,39 @@ class BeeBehavior():
             bee_path = LineString([self.bee.pos, destination_coord])
             
             # 3. Check if new position intersects with wall
-            max_distance = -1
-            furthest_intersection = None
-            for wall in self.bee.model.walls:
-                if bee_path.intersects(wall):
-                    intersection = bee_path.intersection(wall)
+            if self.bee.model.space.out_of_bounds(pos=destination_coord):
+            
+                max_distance = -1
+                furthest_intersection = None
+                for wall in self.bee.model.walls:
+                    if bee_path.intersects(wall):
+                        intersection = bee_path.intersection(wall)
 
-                    # Could be a point or a line (e.g. overlapping)
-                    if intersection.geom_type == "Point":
-                        dist = start_point.distance(intersection)
-                        if dist > max_distance:
-                            max_distance = dist
-                            furthest_intersection = intersection
-                    elif intersection.geom_type == "MultiPoint":
-                        for pt in intersection.geoms:
-                            dist = start_point.distance(pt)
+                        # Could be a point or a line (e.g. overlapping)
+                        if intersection.geom_type == "Point":
+                            dist = start_point.distance(intersection)
                             if dist > max_distance:
                                 max_distance = dist
-                                furthest_intersection = pt
-                    # Handle line overlap (optional)
-                    elif intersection.geom_type == "LineString":
-                        # Use the farthest endpoint of the overlap
-                        coords = list(intersection.coords)
-                        for pt_coords in [coords[0], coords[-1]]:
-                            pt = Point(pt_coords)
-                            dist = start_point.distance(pt)
-                            if dist > max_distance:
-                                max_distance = dist
-                                furthest_intersection = pt
+                                furthest_intersection = intersection
+                        elif intersection.geom_type == "MultiPoint":
+                            for pt in intersection.geoms:
+                                dist = start_point.distance(pt)
+                                if dist > max_distance:
+                                    max_distance = dist
+                                    furthest_intersection = pt
+                        # Handle line overlap (optional)
+                        elif intersection.geom_type == "LineString":
+                            # Use the farthest endpoint of the overlap
+                            coords = list(intersection.coords)
+                            for pt_coords in [coords[0], coords[-1]]:
+                                pt = Point(pt_coords)
+                                dist = start_point.distance(pt)
+                                if dist > max_distance:
+                                    max_distance = dist
+                                    furthest_intersection = pt
 
-            if furthest_intersection is not None:
-                bee_path = LineString([self.bee.pos, furthest_intersection])
+                if furthest_intersection is not None:
+                    bee_path = LineString([self.bee.pos, furthest_intersection])
 
             return self.sample_line(bee_path, 0.7)
     
@@ -173,20 +192,6 @@ class BeeBehavior():
 
         points = [line.interpolate(distance) for distance in distances]
         return [tuple(point.coords[0]) for point in points]
-# ### Examples of determining intersection of points and lines.      
-# # Define two lines
-# line1 = LineString([(0, 0), (5, 5)])
-# line2 = LineString([(0, 5), (5, 0)])
-
-# # Check if they intersect
-# if line1.intersects(line2):
-#     print("The lines intersect!")
-
-#     # Get the intersection point
-#     intersection = line1.intersection(line2)
-#     print("Intersection point:", intersection)
-# else:
-#     print("The lines do not intersect.")
         
     def cauchy_pdf(self, x, x0=0, gamma=1):
         numerator = 1
@@ -230,10 +235,11 @@ class Bee(mesa.Agent):
         self.has_pollen = False
         self.pollen_timer = 0 
         self.pollen_timer_max = 25 # 25 steps for pollen carrying
-        self.destination = None
+        # self.destination = None
 
         # Parameters for traveling
-        self.travel_route = []        
+        self.travel_route = []
+        self.on_plant = None   
         
     def step(self):
         """
@@ -248,7 +254,10 @@ class Bee(mesa.Agent):
         """
         Color code for visualization of the bee
         """
-        return {"color" : "orange", "edgecolors" : "none"}
+        if self.has_pollen:
+            return {"color" : "white", "edgecolors" : "black"}
+        else:
+            return {"color" : "black", "edgecolors" : "none"}
     
 """
 Plant behavior class
@@ -273,6 +282,7 @@ class Plant(mesa.Agent):
         self.model = model
         self.gender = gender  # "male" or "female"
         self.pos = coord      # (x, y)
+        self.bee_on = None    # Bee on the flower
         self.visited = False  # Indication if flower has been visited before (flower scent)
         
         # Additional attributes based on the gender of the flower
@@ -307,14 +317,14 @@ class Plant(mesa.Agent):
             if not self.visited and self.has_pollen:
                 return {"color" : "blue", "edgecolors" : "none"}
             elif self.visited and not self.has_pollen:
-                return {"color" : "blue", "edgecolors" : "white"}  # Black border line
+                return {"color" : "blue", "edgecolors" : "white"}  # White border line
             else:
-                raise "Male flower in state not considered or invalid"
+                raise "Male flower in state not considered or invalid" 
         elif self.gender == "female":
             if not self.visited and not self.pollinated:
                 return {"color" : "red", "edgecolors" : "none"}
             elif self.visited and not self.pollinated:
-                return {"color" : "red", "edgecolors" : "white"} # TODO: add white border line
+                return {"color" : "red", "edgecolors" : "white"}
             elif self.visited and self.pollinated:
                 return {"color" : "orange", "edgecolors" : "none"}
             else:
@@ -324,10 +334,11 @@ class Plant(mesa.Agent):
 class Wall(mesa.Agent):
     def __init__(self, model):
         """
-        TODO: create walls/obstacles in the environment. For now, this is just an empty class and not used
-        
         Input:
         - model: the model instance of the environment
+        
+        NOTE: Currently not in use, the wall is defined in the model class under
+        the attribute "walls". The wall is a shapely LineString object.
         """
         super().__init__(model)
         self.agent_type = "wall"
