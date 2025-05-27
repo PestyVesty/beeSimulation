@@ -102,7 +102,7 @@ class BeeBehavior():
         # 8. Are any nearby flowers unvisited targets?
         neighbors = self.bee.model.space.get_neighbors(pos = self.bee.pos, radius=self.bee.vision_range, include_center=True)
         plant_agents = [agent for agent in neighbors if isinstance(agent, Plant)]
-        unvisited_plants = [plant for plant in plant_agents if not plant.visited]
+        unvisited_plants = [plant for plant in plant_agents if not plant.visited and plant.bee_on is None]
         
         # 8 -No-> 9, Pick new destination cell
         if unvisited_plants == []:

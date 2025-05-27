@@ -15,7 +15,8 @@ class GreenhouseModel(mesa.Model):
         # Initiate the environment space
         self.space_width = 18 * 0.7 # 18 cells * 0.7 m = 12.6 m
         self.space_length = 72 * 0.7 # 72 cells * 0.7 m = 50.4 m
-        self.space = mesa.space.ContinuousSpace(self.space_length, self.space_width, True) # Allowing agents to wrap around the edges
+        
+        self.space = mesa.space.ContinuousSpace(self.space_length, self.space_width, True) # Allowing agents to wrap around the space, however this just allows bees to be on the edge of the environment
         
         # Declaring walls        
         self.walls = [LineString([(0, 0), (0, self.space_width)]), 
