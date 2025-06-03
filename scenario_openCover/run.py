@@ -1,14 +1,88 @@
-import model
+from model import OpenCoverModel
 import pickle
 import tqdm as tqdm
+import argparse
+from mesa.batchrunner import batch_run
+import pandas as pd
 
 if __name__ == "__main__":
-    model = model.OpenCoverModel(seed=0)  # Initialize the model with a seed
-    for i in tqdm.tqdm(range(7 * 60 * 60)):  # Run the model for 500 steps
-        model.step()
-        
-    df = model.datacollector.get_agent_vars_dataframe()
+    parser = argparse.ArgumentParser(description="Run batch simulations of the bee model.")
+    parser.add_argument(
+        "-b", "--behavior", type=str,
+        choices=["pure_levy", "truncated_levy", "composite_levy"],
+        default="composite_levy"
+    )
+    parser.add_argument(
+        "-lp", "--landing_prob", type=float,
+        default=1.0
+    )
+    parser.add_argument(
+        "-ms", "--memory_size", type=int,
+        default=5
+    )
+    parser.add_argument(
+        "-na", "--n_agents", type=int,
+        default=60
+    )
+    parser.add_argument(
+        "-i", "--iterations", type=int,
+        default=5,
+        help="Number of times each parameter set is repeated"
+    )
+    parser.add_argument(
+        "-s", "--steps", type=int,
+        default=5 * 60 * 60,
+        help="Number of simulation steps"
+    )
+    parser.add_argument(
+        "-np", "--num_processes", type=int,
+        default=10,
+        help="Number of processes to run in parallel. Use None to use all CPUs"
+    )
+    args = parser.parse_args()
+
+    # Define parameter dictionary for batch_run
+    param_dict = {
+        "n_agents": args.n_agents,
+        "bee_behavior": args.behavior,
+        "landing_prob": args.landing_prob,
+        "memory_size": args.memory_size,
+        "seed": range(args.iterations)  # unique seeds for each iteration
+    }
+
+    results = batch_run(
+        model_cls=OpenCoverModel,
+        parameters=param_dict,
+        iterations=1,  
+        max_steps=args.steps,
+        number_processes=args.num_processes,
+        data_collection_period=1,
+        display_progress=True
+    )
+
+    # Save results
+    df = pd.DataFrame(results)
+    output_filename = f"batch_results_{args.behavior}.pkl"
+    with open(output_filename, "wb") as f:
+        pickle.dump(results, f)
+    print(f"Simulation complete. Results saved to {output_filename}")
     
-    with open("simulation_data.pkl", "wb") as f:
-        pickle.dump(df, f)
-    print("Model finished running.")
+
+    # # Initialize the model with parsed arguments
+    # sim_model = OpenCoverModel(
+    #     seed=0,
+    #     bee_behavior=args.behavior,
+    #     landing_prob=args.landing_prob,
+    #     memory_size=args.memory_size,
+    #     n_agents=args.n_agents
+    # )
+
+    # model = OpenCoverModel(seed=0)  # Initialize the model with a seed
+    # for i in tqdm.tqdm(range(7 * 60 * 60)):  # Run the model for 500 steps
+    #     model.step()
+        
+    # df = model.datacollector.get_agent_vars_dataframe()
+    
+    # with open(f"simulation_data_{argparse.behavior}.pkl", "wb") as f:
+    #     pickle.dump(df, f)
+    # print("Model finished running.")

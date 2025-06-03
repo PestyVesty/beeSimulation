@@ -1,12 +1,17 @@
 import mesa
-from agents import Bee, Plant, BeeBehavior, BeeHive
+from agents import Bee, Plant, BeeBehavior, BeeHive, CompositeLevyBehavior
 from mesa.datacollection import DataCollector
 from shapely.geometry import LineString
 
 class OpenCoverModel(mesa.Model):
-    def __init__(self, n_agents = 60, seed = None):
+    def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0, memory_size=5):
         super().__init__(seed=seed)
         
+        self.bee_behavior = bee_behavior
+        self.landing_prob = landing_prob
+        self.memory_size = memory_size
+        self.n_agents = n_agents
+
         # Initiate the environment space
         self.space_width = 2.85 * 4
         self.space_length = 10 + 100 + 10
@@ -35,7 +40,9 @@ class OpenCoverModel(mesa.Model):
                              "Plot Code"     : lambda a: a.color_code(),
                              "Plant visit count" : "visit_count",
                              "Plant visit timestamp" : "visit_timestamp",
-                             "BeeHive ID" : "beehive_id"}   
+                             "BeeHive ID" : "beehive_id",
+                             "Plant visited:" : "visited", # Boolean
+                            }   
         )
         
         self.datacollector.collect(self)
@@ -51,12 +58,15 @@ class OpenCoverModel(mesa.Model):
         n_agents: number of bees to create at the beehive
         coord: coordinates of the beehive in the environment
         """
-        beehive = BeeHive(self, coord, my_id)
+        beehive = BeeHive(self, my_id)
         self.space.place_agent(beehive, coord)
         
         for _ in range(n_agents):
-            beeBehavior = BeeBehavior()
-            bee = Bee(self, beeBehavior, coord = coord, beehive = beehive)
+            if self.bee_behavior == "composite_levy":
+                beeBehavior = CompositeLevyBehavior(landing_prob=self.landing_prob, memory_size=self.memory_size)
+            else:
+                beeBehavior = BeeBehavior(self.bee_behavior, landing_prob=self.landing_prob)
+            bee = Bee(self, beeBehavior, beehive = beehive)
             self.space.place_agent(bee, coord)  
                         
     def create_plant_agents(self):
@@ -75,9 +85,9 @@ class OpenCoverModel(mesa.Model):
             coord2 = (x_coord, y * 2)
             coord3 = (x_coord, y * 3)
             
-            plant1 = Plant(self, coord1)
-            plant2 = Plant(self, coord2)
-            plant3 = Plant(self, coord3)
+            plant1 = Plant(self)
+            plant2 = Plant(self)
+            plant3 = Plant(self)
             
             self.space.place_agent(plant1, coord1)
             self.space.place_agent(plant2, coord2)
