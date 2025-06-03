@@ -2,4 +2,5 @@ temp.ipynb
 **/__pycache__
 **/*.pkl
 **/*.ipynb_checkpoints
+**/*.html
 **/*.gif

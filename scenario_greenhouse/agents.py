@@ -102,7 +102,7 @@ class BeeBehavior():
         # 8. Are any nearby flowers unvisited targets?
         neighbors = self.bee.model.space.get_neighbors(pos = self.bee.pos, radius=self.bee.vision_range, include_center=True)
         plant_agents = [agent for agent in neighbors if isinstance(agent, Plant)]
-        unvisited_plants = [plant for plant in plant_agents if not plant.visited]
+        unvisited_plants = [plant for plant in plant_agents if not plant.visited and plant.bee_on is None]
         
         # 8 -No-> 9, Pick new destination cell
         if unvisited_plants == []:
@@ -208,7 +208,7 @@ class BeeBehavior():
         return x1, y1
     
 class Bee(mesa.Agent):
-    def __init__(self, model, beebehavior : BeeBehavior, coord, theta):
+    def __init__(self, model, beebehavior : BeeBehavior, theta):
         super().__init__(model)
         """
         Input:
@@ -224,7 +224,7 @@ class Bee(mesa.Agent):
         self.walls = self.model.walls
         self.space = self.model.space
         
-        self.pos = coord
+        self.pos = None
         
         self.theta = theta
         self.vision_range = 0.7
@@ -263,7 +263,7 @@ class Bee(mesa.Agent):
 Plant behavior class
 """
 class Plant(mesa.Agent):
-    def __init__(self, model, gender, coord):
+    def __init__(self, model, gender):
         """
         Input:
         - model: the model instance of the environment
@@ -281,7 +281,7 @@ class Plant(mesa.Agent):
         
         self.model = model
         self.gender = gender  # "male" or "female"
-        self.pos = coord      # (x, y)
+        self.pos = None      # (x, y)
         self.bee_on = None    # Bee on the flower
         self.visited = False  # Indication if flower has been visited before (flower scent)
         

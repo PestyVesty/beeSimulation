@@ -15,7 +15,8 @@ class GreenhouseModel(mesa.Model):
         # Initiate the environment space
         self.space_width = 18 * 0.7 # 18 cells * 0.7 m = 12.6 m
         self.space_length = 72 * 0.7 # 72 cells * 0.7 m = 50.4 m
-        self.space = mesa.space.ContinuousSpace(self.space_length, self.space_width, True) # Allowing agents to wrap around the edges
+        
+        self.space = mesa.space.ContinuousSpace(self.space_length, self.space_width, True) # Allowing agents to wrap around the space, however this just allows bees to be on the edge of the environment
         
         # Declaring walls        
         self.walls = [LineString([(0, 0), (0, self.space_width)]), 
@@ -66,7 +67,7 @@ class GreenhouseModel(mesa.Model):
             
             for j in range(60):
                 coord = (x + j * 0.7, y)
-                plant = Plant(self, gender=gender, coord=coord)                         # NOTE: this creates the plant and places it in the space
+                plant = Plant(self, gender=gender)                         # NOTE: this creates the plant and places it in the space
                 self.space.place_agent(plant, coord)                                   # NOTE: this places the plant in the space
         
     def create_bee_agents(self, n_agents):
@@ -82,7 +83,7 @@ class GreenhouseModel(mesa.Model):
             theta = self.random.uniform(0, 360)
             
             beebehavior = BeeBehavior()                                                      
-            bee = Bee(self, beebehavior, coord=coord, theta=theta)
+            bee = Bee(self, beebehavior, theta=theta)
             self.space.place_agent(bee, coord) 
             
     def get_plant_row_gender(self, char):
