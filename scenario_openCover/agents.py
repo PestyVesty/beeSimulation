@@ -149,68 +149,6 @@ class BeeBehavior():
             random_plant = self.bee.random.choice(available_plants)
             self.bee.travel_route = [random_plant.pos]   
     
-    # def cauchy_sample(self):
-    #     """
-    #     With respect to Figure 2 in the research paper, this fuction corresponds
-    #     to the cell "Pick new destination cell"
-        
-    #     Sampling the Cauchy distribution:
-    #     1. Sample the direction
-    #     2. Sample the length of the movement and determine new position coordinates
-    #     3. Check if new position intersects with wall
-    #         - If it does, set the new position to the wall position
-    #     4. From the current to the new position, divide it up into 0.7 m steps
-    #     5. Move towards the next position
-    #     """
-        
-    #     while True:
-    #         # 1. Sample the direction
-    #         theta = self.bee.random.uniform(0, 360)
-            
-    #         # 2. Sample length of movement
-    #         distance = self.cauchy_pdf(x=0)
-
-    #         # Compute new coordinates
-    #         destination_coord = self.compute_endpoint(self.bee.pos[0], self.bee.pos[1], distance, theta)
-    #         start_point = Point(self.bee.pos)
-    #         bee_path = LineString([self.bee.pos, destination_coord])
-            
-    #         # 3. Check if new position intersects with wall
-    #         if self.bee.model.space.out_of_bounds(pos=destination_coord):
-            
-    #             max_distance = -1
-    #             furthest_intersection = None
-    #             for wall in self.bee.model.walls:
-    #                 if bee_path.intersects(wall):
-    #                     intersection = bee_path.intersection(wall)
-
-    #                     # Could be a point or a line (e.g. overlapping)
-    #                     if intersection.geom_type == "Point":
-    #                         dist = start_point.distance(intersection)
-    #                         if dist > max_distance:
-    #                             max_distance = dist
-    #                             furthest_intersection = intersection
-    #                     elif intersection.geom_type == "MultiPoint":
-    #                         for pt in intersection.geoms:
-    #                             dist = start_point.distance(pt)
-    #                             if dist > max_distance:
-    #                                 max_distance = dist
-    #                                 furthest_intersection = pt
-    #                     # Handle line overlap (optional)
-    #                     elif intersection.geom_type == "LineString":
-    #                         # Use the farthest endpoint of the overlap
-    #                         coords = list(intersection.coords)
-    #                         for pt_coords in [coords[0], coords[-1]]:
-    #                             pt = Point(pt_coords)
-    #                             dist = start_point.distance(pt)
-    #                             if dist > max_distance:
-    #                                 max_distance = dist
-    #                                 furthest_intersection = pt
-
-    #             if furthest_intersection is not None:
-    #                 bee_path = LineString([self.bee.pos, furthest_intersection])
-
-    #         return self.sample_line(bee_path, 0.7)
     def levy_pure_sample(self, mu=2.0, l_min=0.7):
 
         while True:
@@ -457,6 +395,142 @@ class CompositeLevyBehavior(BeeBehavior):
             return self.sample_line(bee_path, 0.7), is_long_jump
 
 
+class RowFollowingBehavior(BeeBehavior):
+    def __init__(self, landing_prob, reward_size=5, biased_distribution=None):
+        super().__init__(bee_behavior="row_following", landing_prob=landing_prob)
+        self.reward_size = reward_size
+        self.memory_queue = []
+
+        if biased_distribution is None:
+            self.biased_distribution = lambda n=1: np.random.uniform(-180, 180, size=n)
+        else:
+            self.biased_distribution = biased_distribution
+
+    def step(self):
+        if self.bee.forage_timer == 0:
+            if not self.bee.travel_route:
+                self.get_new_directions()
+            else:
+                next_coord = self.bee.travel_route.pop(0)
+                next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
+                self.bee.model.space.move_agent(self.bee, next_coord)
+
+                if not self.bee.travel_route:
+                    if self.bee.is_long_jump:
+                        self.get_new_directions()
+                        self.bee.is_long_jump = False
+                        return
+
+                    below = self.bee.model.space.get_neighbors(self.bee.pos, 0, include_center=True)
+                    plant_agents = [agent for agent in below if isinstance(agent, Plant)]
+                    available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant != self.bee.last_plant]
+
+                    if available_plants and self.land_on_flower(self.bee):
+                        plant = available_plants[0]
+                        self.bee.forage_timer = self.bee.forage_timer_max
+                        self.bee.on_plant = plant
+                        plant.bee_on = self.bee
+                        plant.visit_count += 1
+                        plant.visit_timestamp.append(self.bee.model.steps)
+                        plant.visited = True
+                        plant.visited_this_step = True
+                        self.memory_queue.append(1)
+                    else:
+                        self.memory_queue.append(0)
+                        self.get_new_directions()
+
+                    if len(self.memory_queue) > self.reward_size:
+                        self.memory_queue.pop(0)
+        else:
+            self.bee.forage_timer -= 1
+            if self.bee.forage_timer == 0:
+                self.bee.last_plant = self.bee.on_plant
+                self.bee.on_plant.bee_on = None
+                self.bee.on_plant = None
+
+    def get_new_directions(self):
+        neighbors = self.bee.model.space.get_neighbors(self.bee.pos, self.bee.vision_range, include_center=True)
+        plant_agents = [agent for agent in neighbors if isinstance(agent, Plant)]
+        available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant != self.bee.last_plant]
+
+        if not available_plants:
+            if len(self.memory_queue) < self.reward_size:
+                self.bee.travel_route, self.bee.is_long_jump = self.sample_from_biased_distribution(max_jump=self.LONG_JUMP_THRESHOLD)
+            else:
+                success_rate = sum(self.memory_queue) / self.reward_size
+                if self.bee.random.random() > success_rate:
+                    self.bee.travel_route, self.bee.is_long_jump = self.sample_from_biased_distribution()
+                else:
+                    self.bee.travel_route, self.bee.is_long_jump = self.sample_from_biased_distribution(max_jump=self.LONG_JUMP_THRESHOLD)
+        else:
+            random_plant = self.bee.random.choice(available_plants)
+            self.bee.travel_route = [random_plant.pos]
+
+            # Update theta to face toward flower:
+            dx = random_plant.pos[0] - self.bee.pos[0]
+            dy = random_plant.pos[1] - self.bee.pos[1]
+            theta_to_flower = math.degrees(math.atan2(dy, dx))
+
+            # Normalize to [-180, 180]
+            if theta_to_flower > 180:
+                theta_to_flower -= 360
+            elif theta_to_flower < -180:
+                theta_to_flower += 360
+
+            self.bee.theta = theta_to_flower
+
+    def sample_from_biased_distribution(self, max_jump=None):
+        # ample turning angle from distribution (relative to current theta)
+        delta_theta = self.biased_distribution(self.bee.random, 1)[0]
+
+        # Update bee's theta
+        new_theta = (self.bee.theta + delta_theta) % 360
+        if new_theta > 180:
+            new_theta -= 360
+        self.bee.theta = new_theta
+
+        # Sample distance
+        distance = self.bee.random.uniform(0.7, 3.5)  # You can later make this smarter if needed
+
+        if max_jump is not None and distance >= max_jump:
+            distance = max_jump * 0.99
+
+        is_long_jump = distance > self.LONG_JUMP_THRESHOLD
+
+        # Compute destination
+        destination_coord = self.compute_endpoint(self.bee.pos[0], self.bee.pos[1], distance, new_theta)
+        start_point = Point(self.bee.pos)
+        bee_path = LineString([self.bee.pos, destination_coord])
+
+        # Handle wall collisions
+        if self.bee.model.space.out_of_bounds(pos=destination_coord):
+            max_distance = -1
+            furthest_intersection = None
+            for wall in self.bee.model.walls:
+                if bee_path.intersects(wall):
+                    intersection = bee_path.intersection(wall)
+                    if intersection.geom_type == "Point":
+                        dist = start_point.distance(intersection)
+                        if dist > max_distance:
+                            max_distance = dist
+                            furthest_intersection = intersection
+                    elif intersection.geom_type == "MultiPoint":
+                        for pt in intersection.geoms:
+                            dist = start_point.distance(pt)
+                            if dist > max_distance:
+                                max_distance = dist
+                                furthest_intersection = pt
+                    elif intersection.geom_type == "LineString":
+                        for pt_coords in [list(intersection.coords)[0], list(intersection.coords)[-1]]:
+                            pt = Point(pt_coords)
+                            dist = start_point.distance(pt)
+                            if dist > max_distance:
+                                max_distance = dist
+                                furthest_intersection = pt
+            if furthest_intersection:
+                bee_path = LineString([self.bee.pos, furthest_intersection])
+
+        return self.sample_line(bee_path, 0.7), is_long_jump
 
     
 
@@ -495,6 +569,7 @@ class Bee(mesa.Agent):
         self.on_plant = None
         self.last_plant = None
         
+        self.theta = None # Direction of the bee in degrees
     def step(self):
         """
         Bee behavior based on the declared bee behavior class

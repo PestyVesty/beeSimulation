@@ -1,7 +1,8 @@
 import mesa
-from agents import Bee, Plant, BeeBehavior, BeeHive, CompositeLevyBehavior
+from agents import Bee, Plant, BeeBehavior, BeeHive, CompositeLevyBehavior, RowFollowingBehavior
 from mesa.datacollection import DataCollector
 from shapely.geometry import LineString
+import numpy as np
 
 class OpenCoverModel(mesa.Model):
     def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0, reward_size=5):
@@ -61,14 +62,45 @@ class OpenCoverModel(mesa.Model):
         """
         beehive = BeeHive(self, my_id)
         self.space.place_agent(beehive, coord)
-        
+
+        # Prepare biased distribution for row_following (outside bee loop!)
+        if self.bee_behavior == "row_following":
+            x_discrete = np.array([-180, -135, -90, -45, 0, 45, 90, 135, 180])
+            y_discrete = np.array([0.06, 0.07, 0.13, 0.17, 0.20, 0.17, 0.13, 0.07, 0.06])
+            x_fine = np.linspace(-180, 180, 1000)
+            pdf_fine = np.interp(x_fine, x_discrete, y_discrete)
+            dx_pdf = x_fine[1] - x_fine[0]
+            pdf_fine /= np.sum(pdf_fine * dx_pdf)
+            cdf_pdf = np.cumsum(pdf_fine) * dx_pdf
+            cdf_pdf /= cdf_pdf[-1]
+
+            def biased_distribution(bee_random, n=1):
+                return [np.interp(bee_random.random(), cdf_pdf, x_fine) for _ in range(n)]
+
+        # Create bees
         for _ in range(n_agents):
             if self.bee_behavior == "composite_levy":
-                beeBehavior = CompositeLevyBehavior(landing_prob=self.landing_prob, reward_size=self.reward_size)
+                beeBehavior = CompositeLevyBehavior(
+                    landing_prob=self.landing_prob,
+                    reward_size=self.reward_size
+                )
+            elif self.bee_behavior == "row_following":
+                beeBehavior = RowFollowingBehavior(
+                    landing_prob=self.landing_prob,
+                    reward_size=self.reward_size,
+                    biased_distribution=biased_distribution
+                )
             else:
-                beeBehavior = BeeBehavior(self.bee_behavior, landing_prob=self.landing_prob)
-            bee = Bee(self, beeBehavior, beehive = beehive)
-            self.space.place_agent(bee, coord)  
+                beeBehavior = BeeBehavior(
+                    self.bee_behavior,
+                    landing_prob=self.landing_prob
+                )
+
+            bee = Bee(self, beeBehavior, beehive=beehive)
+            bee.theta = 0.0  # Initialize bee facing direction
+
+            self.space.place_agent(bee, coord)
+
                         
     def create_plant_agents(self):
         """
