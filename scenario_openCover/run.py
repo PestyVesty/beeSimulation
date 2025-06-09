@@ -9,7 +9,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run batch simulations of the bee model.")
     parser.add_argument(
         "-b", "--behavior", type=str,
-        choices=["pure_levy", "truncated_levy", "composite_levy"],
+        choices=["pure_levy", "truncated_levy", "composite_levy", "all"],
         default="composite_levy"
     )
     parser.add_argument(
@@ -17,7 +17,7 @@ if __name__ == "__main__":
         default=1.0
     )
     parser.add_argument(
-        "-ms", "--memory_size", type=int,
+        "-rs", "--reward_size", type=int,
         default=5
     )
     parser.add_argument(
@@ -31,7 +31,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-s", "--steps", type=int,
-        default=5 * 60 * 60,
+        default=7 * 60 * 60,
         help="Number of simulation steps"
     )
     parser.add_argument(
@@ -41,31 +41,41 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Define parameter dictionary for batch_run
-    param_dict = {
-        "n_agents": args.n_agents,
-        "bee_behavior": args.behavior,
-        "landing_prob": args.landing_prob,
-        "memory_size": args.memory_size,
-        "seed": range(args.iterations)  # unique seeds for each iteration
-    }
+    # Determine which behaviors to run
+    if args.behavior == "all":
+        behaviors_to_run = ["pure_levy", "truncated_levy", "composite_levy"]
+    else:
+        behaviors_to_run = [args.behavior]
 
-    results = batch_run(
-        model_cls=OpenCoverModel,
-        parameters=param_dict,
-        iterations=1,  
-        max_steps=args.steps,
-        number_processes=args.num_processes,
-        data_collection_period=1,
-        display_progress=True
-    )
+    for behavior in behaviors_to_run:
+        print(f"\n=== Running behavior: {behavior} ===\n")
 
-    # Save results
-    df = pd.DataFrame(results)
-    output_filename = f"batch_results_{args.behavior}.pkl"
-    with open(output_filename, "wb") as f:
-        pickle.dump(results, f)
-    print(f"Simulation complete. Results saved to {output_filename}")
+        # Define parameter dictionary for batch_run
+        param_dict = {
+            "n_agents": args.n_agents,
+            "bee_behavior": behavior,
+            "landing_prob": args.landing_prob,
+            "reward_size": args.reward_size,
+            "seed": range(args.iterations)
+        }
+
+        results = batch_run(
+            model_cls=OpenCoverModel,
+            parameters=param_dict,
+            iterations=1,
+            max_steps=args.steps,
+            number_processes=args.num_processes,
+            data_collection_period=10,
+            display_progress=True
+        )
+
+        # Save results
+        df = pd.DataFrame(results)
+        output_filename = f"batch_results_{behavior}.pkl"
+        with open(output_filename, "wb") as f:
+            pickle.dump(results, f)
+        print(f"Simulation complete. Results saved to {output_filename}")
+
     
 
     # # Initialize the model with parsed arguments
@@ -73,7 +83,7 @@ if __name__ == "__main__":
     #     seed=0,
     #     bee_behavior=args.behavior,
     #     landing_prob=args.landing_prob,
-    #     memory_size=args.memory_size,
+    #     reward_size=args.reward_size,
     #     n_agents=args.n_agents
     # )
 

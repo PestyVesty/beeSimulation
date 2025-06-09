@@ -4,12 +4,12 @@ from mesa.datacollection import DataCollector
 from shapely.geometry import LineString
 
 class OpenCoverModel(mesa.Model):
-    def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0, memory_size=5):
+    def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0, reward_size=5):
         super().__init__(seed=seed)
         
         self.bee_behavior = bee_behavior
         self.landing_prob = landing_prob
-        self.memory_size = memory_size
+        self.reward_size = reward_size
         self.n_agents = n_agents
 
         # Initiate the environment space
@@ -38,10 +38,11 @@ class OpenCoverModel(mesa.Model):
                              "Agent Type"    : "agent_type",
                              "unique_id"     : "unique_id",
                              "Plot Code"     : lambda a: a.color_code(),
-                             "Plant visit count" : "visit_count",
+                             "Plant visit count" : "visit_count", # Cumalative count of visits to each plant
                              "Plant visit timestamp" : "visit_timestamp",
                              "BeeHive ID" : "beehive_id",
                              "Plant visited:" : "visited", # Boolean
+                             "Plant visited this step": lambda a: getattr(a, "visited_this_step", False),
                             }   
         )
         
@@ -63,7 +64,7 @@ class OpenCoverModel(mesa.Model):
         
         for _ in range(n_agents):
             if self.bee_behavior == "composite_levy":
-                beeBehavior = CompositeLevyBehavior(landing_prob=self.landing_prob, memory_size=self.memory_size)
+                beeBehavior = CompositeLevyBehavior(landing_prob=self.landing_prob, reward_size=self.reward_size)
             else:
                 beeBehavior = BeeBehavior(self.bee_behavior, landing_prob=self.landing_prob)
             bee = Bee(self, beeBehavior, beehive = beehive)

@@ -88,6 +88,7 @@ class BeeBehavior():
                         plant.visit_count += 1
                         plant.visit_timestamp.append(self.bee.model.steps)
                         plant.visited = True
+                        plant.visited_this_step = True 
                     # 6. No, did not land on flower 
                     else:
                         # 8. Any unvisited flower in the environment?
@@ -341,9 +342,9 @@ class BeeBehavior():
 
 
 class CompositeLevyBehavior(BeeBehavior):
-    def __init__(self, landing_prob, memory_size=5):
+    def __init__(self, landing_prob, reward_size=5):
         super().__init__(bee_behavior="composite_levy", landing_prob=landing_prob)
-        self.memory_size = memory_size
+        self.reward_size = reward_size
         self.memory_queue = []
 
     def step(self):
@@ -378,7 +379,7 @@ class CompositeLevyBehavior(BeeBehavior):
                         self.memory_queue.append(0)
                         self.get_new_directions()
 
-                    if len(self.memory_queue) > self.memory_size:
+                    if len(self.memory_queue) > self.reward_size:
                         self.memory_queue.pop(0)
         else:
             self.bee.forage_timer -= 1
@@ -393,10 +394,10 @@ class CompositeLevyBehavior(BeeBehavior):
         available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant != self.bee.last_plant]
 
         if available_plants == []:
-            if len(self.memory_queue) < self.memory_size:
+            if len(self.memory_queue) < self.reward_size:
                 self.bee.travel_route, self.bee.is_long_jump = self.levy_truncated_sample(max_jump=self.LONG_JUMP_THRESHOLD)
             else:
-                success_rate = sum(self.memory_queue) / self.memory_size
+                success_rate = sum(self.memory_queue) / self.reward_size
                 if self.bee.random.random() > success_rate:
                     self.bee.travel_route, self.bee.is_long_jump = self.levy_truncated_sample()
                 else:
@@ -534,7 +535,9 @@ class Plant(mesa.Agent):
         self.visit_count = 0
         self.visit_timestamp = []
         
-        self.visited = False
+        self.visited = False # A Flag, whether the plant has been visited before by a bee or not
+        
+        self.visited_this_step = False # Whether the plant has been visited this step by a bee or not. A bee landing on it (regardless if it has nectar or not) or foraging on it will set this to True, otherwise it will be False.
         
     def step(self):
         """
@@ -542,8 +545,10 @@ class Plant(mesa.Agent):
         
         However, the plants from the research paper does not exhibit any active
         behavior. They are passive agents and only react to the bee agents. 
+        
+        
         """
-        pass
+        self.visited_this_step = self.bee_on is not None
     
     
     def color_code(self):
