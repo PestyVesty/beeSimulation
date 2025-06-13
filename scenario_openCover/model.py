@@ -1,5 +1,5 @@
 import mesa
-from agents import Bee, Plant, BeeBehavior, BeeHive, CompositeLevyBehavior, RowFollowingBehavior
+from agents import Bee, Plant, PureLevyBehavior, TruncatedLevyBehavior, BeeHive, CompositeLevyBehavior, BiasedCompositeLevyBehavior
 from mesa.datacollection import DataCollector
 from shapely.geometry import LineString
 import numpy as np
@@ -63,8 +63,8 @@ class OpenCoverModel(mesa.Model):
         beehive = BeeHive(self, my_id)
         self.space.place_agent(beehive, coord)
 
-        # Prepare biased distribution for row_following (outside bee loop!)
-        if self.bee_behavior == "row_following":
+        # Prepare biased distribution for biased_composite (outside bee loop!)
+        if self.bee_behavior == "biased_composite":
             x_discrete = np.array([-180, -135, -90, -45, 0, 45, 90, 135, 180])
             y_discrete = np.array([0.06, 0.07, 0.13, 0.17, 0.20, 0.17, 0.13, 0.07, 0.06])
             x_fine = np.linspace(-180, 180, 1000)
@@ -84,17 +84,18 @@ class OpenCoverModel(mesa.Model):
                     landing_prob=self.landing_prob,
                     reward_size=self.reward_size
                 )
-            elif self.bee_behavior == "row_following":
-                beeBehavior = RowFollowingBehavior(
+            elif self.bee_behavior == "biased_composite":
+                beeBehavior = BiasedCompositeLevyBehavior(
                     landing_prob=self.landing_prob,
                     reward_size=self.reward_size,
                     biased_distribution=biased_distribution
                 )
+            elif self.bee_behavior == "pure_levy":
+                beeBehavior = PureLevyBehavior(landing_prob=self.landing_prob)
+            elif self.bee_behavior == "truncated_levy":
+                beeBehavior = TruncatedLevyBehavior(landing_prob=self.landing_prob)
             else:
-                beeBehavior = BeeBehavior(
-                    self.bee_behavior,
-                    landing_prob=self.landing_prob
-                )
+                raise ValueError(f"Unknown bee behavior: {self.bee_behavior}")
 
             bee = Bee(self, beeBehavior, beehive=beehive)
             bee.theta = 0.0  # Initialize bee facing direction
