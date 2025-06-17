@@ -432,12 +432,13 @@ class MyPlant(Plant):
 class MyBeeBehavior(BeeBehavior):
     """
     An extension of BiasedCompositeLevyBehavior. The differences:
-    - [x] Homing behavior: Bee flies back to hive either: 
-            1) the stomach is full
-            2) unsuccessful visits reaches 15.
-            After bee reaches the hive, it will be released back into the environment immediately.
+    - [ ] Homing behavior: Bee flies back to hive either: 
+            - [x] 1) the stomach is full
+            - [ ] 2) unsuccessful visits reaches 15.
+            After bee reaches the hive, wait for 5 steps before releasing it back
+            into the environment as a "new" bee.
     - [x] Flower memory: Each bee will have a memory of the last five flowers they have visited.
-    - [x] Flower behavior: Set the flower has 8 micro liters of nectar. Each visits by
+    - [x] Flower behavior: Set the flower has 3 micro liters of nectar. Each visits by
                            bee it will take 1 micro liters of nectar. Each visit time
                            is set to 3 steps.
     - [x] Scent marking: after a bee has successfully foraged, it will leave a decaying
@@ -458,7 +459,7 @@ class MyBeeBehavior(BeeBehavior):
 
     def step(self):
         
-        # 0. Homing behavior: bee is returning to the hive
+        # 0. Check if bee is returning to the hive
         if self.bee.homing:
             if not self.bee.travel_route:
                 # Arrived at hive
@@ -467,27 +468,24 @@ class MyBeeBehavior(BeeBehavior):
                 self.reward_memory_queue.clear()
                 self.bee.unsuccessful_visits = 0
                 self.bee.last_visited_flowers.clear()
-                self.theta = self.bee.random.uniform(-180, 180)
-                self.get_new_directions() # Bees resumes foraging
+                self.theta = None
+                self.get_new_directions()
                 return
-            
             else:
-                # Contue traveling toward hive
+                # Contue travel toward the hive
                 next_coord = self.bee.travel_route.pop(0)
                 next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
                 self.bee.model.space.move_agent(self.bee, next_coord)
                 return
-            
-            
+        
         # 1. Spending turns on current task?
         # 1.1 No
         if self.bee.forage_timer == 0:
-
+            
             # 2. Have a set destination cell?
             # 2.1 No
             if not self.bee.travel_route:
                 self.get_new_directions()
-
             # 2.2 Yes
             else:
                 # 3. Move to next cell
@@ -498,30 +496,27 @@ class MyBeeBehavior(BeeBehavior):
                 # 5. Is it at the destination cell?
                 # 5.1 Yes
                 if not self.bee.travel_route:
-
+                    
                     # Check: Is the jump declared as a "long jump"? If so, get new directions
                     # and reset the reward memory queue.
                     # Bees do not stop for flowers when long jumping.
                     if self.bee.is_long_jump:
                         # After finishing a long jump, get next directions.
                         # Move to 8
-                        self.get_new_directions()
+                        self.get_new_directions() 
                         self.bee.is_long_jump = False
                         self.reward_memory_queue = deque(maxlen=self.reward_size)
-                        self.bee.found_flower_during_short_jump = False  # reset flag after jump completes
                         return
 
                     # Checkpoint: reaching here means the bee completed a short jump.
                     # Checking below if there is a flower below it land on.
                     below = self.bee.model.space.get_neighbors(self.bee.pos, 0, include_center=True)
-                    plant_agents = [agent for agent in below if isinstance(agent, MyPlant)]
-                    available_plants = [plant for plant in plant_agents if plant.bee_on is None and 
-                                        plant not in self.bee.last_visited_flowers]
+                    plant_agents = [agent for agent in below if isinstance(agent, Plant)]
+                    available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant not in self.bee.last_visited_flowers]
 
-                    # 6. Land on flower below?
-                    land_decision = self.land_on_flower(self.bee)
+                    # 6. Flower to harvest below?
                     # 6.1 Yes
-                    if available_plants and land_decision and not available_plants[0].has_scent() and available_plants[0].nectar > 0:
+                    if available_plants and self.land_on_flower(self.bee):
                         # 7. Land and harvest on flower
                         plant = available_plants[0]
                         self.bee.forage_timer = self.bee.forage_timer_max
@@ -530,89 +525,65 @@ class MyBeeBehavior(BeeBehavior):
                         plant.visit_count += 1
                         plant.visit_timestamp.append(self.bee.model.steps)
                         plant.visited = True
-                        plant.visited_this_step = True
-                        self.bee.last_visited_flowers.append(plant)
+                        plant.visited_this_step = True    
+                        plant.leave_scent()
                         self.reward_memory_queue.append(1)
-                        self.bee.found_flower_during_short_jump = False  # reset flag after landing
-                    # 6.2 Yes, but flower has scent or no nectar
-                    elif available_plants and land_decision and (available_plants[0].has_scent() or available_plants[0].nectar == 0):
-                        self.reward_memory_queue.append(0)
-                        self.bee.last_visited_flowers.append(available_plants[0])
-                        self.get_new_directions()
+                        
+                        # Transfer nectar from flower to bee
+                        nectar_to_collect = min(3, plant.nectar, self.bee.stomach_capacity - self.bee.nectar_in_stomach)
+                        if nectar_to_collect > 0:
+                            plant.nectar -= nectar_to_collect
+                            self.bee.add_nectar(nectar_to_collect)
+                            
+                            # Checking whether the bee is full or has made too many unsuccessful visits
+                            if self.bee.is_full() or self.bee.unsuccessful_visits >= 15:
+                                self.bee.homing = True
+                                
+                                # Create Linestring and travel route to beehive
+                                bee_path = LineString([self.bee.pos, self.bee.beehive.pos])
+                                self.bee.travel_route = self.sample_line(bee_path, 0.7)
+                                
+                                dx = self.bee.beehive.pos[0] - self.bee.pos[0]
+                                dy = self.bee.beehive.pos[1] - self.bee.pos[1]
+                                theta = math.degrees(math.atan2(dy, dx))
+                                if theta > 180:
+                                    theta -= 360
+                                elif theta < -180:
+                                    theta += 360
+                                self.bee.theta = theta
+                                
+                        else:
+                            # TODO: Unsuccessful visit, aka flower is empty/nectar collected is 0
+                            pass
+                    # 6.2 No, short jump does not result in flower
                     else:
-                        if not self.bee.found_flower_during_short_jump:
-                            self.get_new_directions()
-                        self.bee.found_flower_during_short_jump = False  # reset after reaching end of route
-
+                        self.reward_memory_queue.append(0)
+                        # Goes to 8
+                        self.get_new_directions()
+                        
                 # 5.2 No, but bee is scanning while moving during short jump
                 else:
-                    # Scan for flowers before continuing along short-jump route
-                    if not self.bee.found_flower_during_short_jump:
-                        neighbors = self.bee.model.space.get_neighbors(self.bee.pos, self.bee.vision_range, include_center=False)
-                        plant_agents = [agent for agent in neighbors if isinstance(agent, MyPlant)]
-                        available_plants = [p for p in plant_agents if p.bee_on is None and p not in self.bee.last_visited_flowers]
-
-                        if available_plants:
-                            # Redirect to the closest or random flower
-                            target_flower = self.bee.random.choice(available_plants)
-                            self.bee.travel_route = [target_flower.pos]  # Overwrite remaining route
-                            self.bee.found_flower_during_short_jump = True  # Prevent switching again this trip
-
-                            # Optional: update direction (theta) toward flower
-                            dx = target_flower.pos[0] - self.bee.pos[0]
-                            dy = target_flower.pos[1] - self.bee.pos[1]
-                            theta = math.degrees(math.atan2(dy, dx))
-                            if theta > 180:
-                                theta -= 360
-                            elif theta < -180:
-                                theta += 360
-                            self.bee.theta = theta
+                    # TODO: if short jump, should detect flowers along the way here  
+                    # NOTE: if found flower during short jump, flag "found_flower_during_short_jump" turns True,
+                    # this will prevent the bee from not committing to the flower it has found within range, and then keeps jumping around
+                    
+                    
                     return
-
-        # 1.2 Yes (still harvesting)
+        # 1.2 yes
         else:
             self.bee.forage_timer -= 1
             if self.bee.forage_timer == 0:
-
-                self.bee.last_plant = self.bee.on_plant
-                
-                # Add nectar to bee's stomach
-                nectar_collected = min(3.0, self.bee.on_plant.nectar)  # Collect nectar from flower
-                self.bee.add_nectar(nectar_collected)
-                self.bee.on_plant.nectar -= nectar_collected
-
-                # Leave scent mark on the flower
-                self.bee.on_plant.leave_scent(duration=5)
-
+                self.bee.last_visited_flowers.append(self.bee.on_plant)
                 self.bee.on_plant.bee_on = None
                 self.bee.on_plant = None
-                
-                # If no nectar was collected, increment unsuccessful visits
-                if nectar_collected == 0:
-                    self.bee.unsuccessful_visits += 1
-                
-                # if stomach is full, bee will return to the hive
-                # Or, if visited 15 empty flowers, bee will return to the hive
-                if self.bee.is_full() or self.bee.unsuccessful_visits >= 15:
-                    self.bee.homing = True
-                    self.bee.travel_route = [self.bee.beehive.pos]
-                    
-                    dx = self.bee.beehive.pos[0] - self.bee.pos[0]
-                    dy = self.bee.beehive.pos[1] - self.bee.pos[1]
-                    theta = math.degrees(math.atan2(dy, dx))
-                    if theta > 180:
-                        theta -= 360
-                    elif theta < -180:
-                        theta += 360
-                    self.bee.theta = theta
-                
+
+
     def get_new_directions(self):
-        # 8. Are any nearby flowers unvisited targets?
-        neighbors = self.bee.model.space.get_neighbors(self.bee.pos, self.bee.vision_range, include_center=False)
-        plant_agents = [agent for agent in neighbors if isinstance(agent, MyPlant)]
+        # 8. Are any nearby flowers not in the visited list?
+        neighbors = self.bee.model.space.get_neighbors(self.bee.pos, self.bee.vision_range, include_center=True)
+        plant_agents = [agent for agent in neighbors if isinstance(agent, Plant)]
         available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant not in self.bee.last_visited_flowers]
-        
-        # 8.1 No, leads to 9
+
         if not available_plants:
             if len(self.reward_memory_queue) < self.reward_size:
                 self.bee.travel_route, self.bee.is_long_jump = self.sample_from_biased_distribution(max_jump=self.LONG_JUMP_THRESHOLD)
@@ -622,7 +593,6 @@ class MyBeeBehavior(BeeBehavior):
                     self.bee.travel_route, self.bee.is_long_jump = self.sample_from_biased_distribution()
                 else:
                     self.bee.travel_route, self.bee.is_long_jump = self.sample_from_biased_distribution(max_jump=self.LONG_JUMP_THRESHOLD)
-        # 8.2 Yes, leads to 10
         else:
             random_plant = self.bee.random.choice(available_plants)
             self.bee.travel_route = [random_plant.pos]
