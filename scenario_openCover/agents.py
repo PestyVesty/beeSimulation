@@ -25,7 +25,7 @@ class BeeHive(mesa.Agent):
         self.agent_type = "beehive"
         self.model = model
         self.pos = None
-        self.my_id = my_id
+        self.my_id = my_id # TODO: Check if this is needed, or if it should be removed (creating new agents in mesa should just assign a unique ID). If so, the go back to model.py and edit the code.
 
     def color_code(self):
         return {"color": "brown", "edgecolors": "none"}

@@ -35,7 +35,7 @@ class OpenCoverModel(mesa.Model):
         #! TODO: Decide what to collect
         self.datacollector = DataCollector(
             model_reporters={},  # Collecting the positions of the agents
-            agent_reporters={"Bee Positions" : "pos",
+            agent_reporters={"Bee Positions" : "pos",   # FIXME: Change "Bee Positions" to "Agent Position"
                              "Agent Type"    : "agent_type",
                              "unique_id"     : "unique_id",
                              "Plot Code"     : lambda a: a.color_code(),
@@ -44,6 +44,8 @@ class OpenCoverModel(mesa.Model):
                              "BeeHive ID" : "beehive_id",
                              "Plant visited:" : "visited", # Boolean
                              "Plant visited this step": lambda a: getattr(a, "visited_this_step", False),
+                             "Plant nectar amount" : lambda a: getattr(a, "nectar", None), # Amount of nectar at the plant
+                             # FIXME: add "from hive", which corresponds to the beehive the bee is from
                             }   
         )
         
