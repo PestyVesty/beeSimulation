@@ -16,10 +16,10 @@ if __name__ == "__main__":
         "-lp", "--landing_prob", type=float,
         default=1.0
     )
-    parser.add_argument(
-        "-rs", "--reward_size", type=int,
-        default=5
-    )
+    # parser.add_argument(
+    #     "-rs", "--reward_size", type=int,
+    #     default=5
+    # )
     parser.add_argument(
         "-na", "--n_agents", type=int,
         default=60
@@ -55,7 +55,7 @@ if __name__ == "__main__":
             "n_agents": args.n_agents,
             "bee_behavior": behavior,
             "landing_prob": args.landing_prob,
-            "reward_size": args.reward_size,
+            # "reward_size": args.reward_size,
             "seed": range(args.iterations)
         }
 

@@ -5,12 +5,13 @@ from shapely.geometry import LineString
 import numpy as np
 
 class OpenCoverModel(mesa.Model):
-    def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0, reward_size=5):
+    # def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0, reward_size=5):
+    def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0):
         super().__init__(seed=seed)
         
         self.bee_behavior = bee_behavior
         self.landing_prob = landing_prob
-        self.reward_size = reward_size
+        # self.reward_size = reward_size
         self.n_agents = n_agents
 
         # Initiate the environment space
@@ -84,12 +85,12 @@ class OpenCoverModel(mesa.Model):
             if self.bee_behavior == "composite_levy":
                 beeBehavior = CompositeLevyBehavior(
                     landing_prob=self.landing_prob,
-                    reward_size=self.reward_size
+                    # reward_size=self.reward_size
                 )
             elif self.bee_behavior == "biased_composite":
                 beeBehavior = BiasedCompositeLevyBehavior(
                     landing_prob=self.landing_prob,
-                    reward_size=self.reward_size,
+                    # reward_size=self.reward_size,
                     biased_distribution=biased_distribution
                 )
             elif self.bee_behavior == "pure_levy":
@@ -99,7 +100,7 @@ class OpenCoverModel(mesa.Model):
             elif self.bee_behavior == "my_behavior":
                 beeBehavior = MyBeeBehavior(
                     landing_prob=self.landing_prob,
-                    reward_size=self.reward_size,
+                    # reward_size=self.reward_size,
                     biased_distribution=biased_distribution
                 )
             else:
