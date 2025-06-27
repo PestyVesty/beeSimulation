@@ -582,6 +582,7 @@ class MyBeeBehavior(BeeBehavior):
                             self.bee.reward_memory.append(0)
                             if self.bee.on_plant:
                                 self.bee.on_plant.bee_on = None
+                                self.bee.on_plant.leave_scent() # Leave a scent, as bee landed on the flower and there are no nectar
                                 self.bee.on_plant = None
                             self.get_new_action()
                         else:
@@ -724,17 +725,40 @@ class MyBeeBehavior(BeeBehavior):
     
     
     """
-    TODO: 
-    - [ ] Add to memory when a bee has not successfully visited a flower
-    - [ ] Check if the bee enters homing behavior when it's stomach is full
-    - [ ] Check if reward memory is working correctly
-    - [ ] Check if the bee last_visited_flowers is working correctly
-    - [ ] Check if the bee Levy flight is working correctly
-    - [ ] Check each function is working as intended
+    Things to check and verify
+    - [ ] Bee navigation logic (levy flight)
+        - [ ] Collect and plot the jump distances, ensure it is a negative exponential distribution  
+        - [ ] Collect and plot the turn angles, ensure it matches to the defined distribution 
         - [ ] What is a long jump, what is a short jump? Determine this in a different file.
+    - [x] Bee scanning logic
+        - A bee will fly and scan for flowers during regular jumps
+        - A bee will not scan during a "long jump". A jump is defined as a long jump based on the reward_memory queue.
+    - [x] Bee landing logic
+        - Bees will land on a flower based on a probability, however I have set the probability to 100%
+        - A bee will not land when there is a scent mark on the flower or a bee is on the flower
+    - [x] Bee foraging logic
+        - Bee will forage nectar from a flower for a fixed amount of time steps, then leaves a scent on the flower when they are done
+        - If the flower does not have nectar, they will leave a scent and move on
+    - [x] Update on latest_visited_flowers:
+        - Bees will update this memory when they land on a flower, regardless whether the flower has nectar or not.
+    - [x] Bee nectar collection logic
+        - Bees will collect nectar from the flower based, the amount is fixed at 3 micro liters, and the amount of time it takes to
+          forage is also fixed
+    - [x] Scent marking logic
+        - Checked via visualisation, where scent mark timer is assigned when bees leave a flower after visiting, regardless if the flower has nectar or not.
+        - Time decrements correctly
+    - [x] Landing logic
+        - Bees does not land on flowers with scent marks
+        - Bees does not land on flowers that have a bee on top of it, which is checked by parameter bee_on that registers the bee that is on the flower
+    - [ ] Homing behavior
+        - [ ] Bees only returns to hive when stomach is full
+    - [ ] Check if the bee Levy flight is working correctly
+
     - [ ] Removed reward_memory from beebehavior class to bee itself and reward_size to bee class
-    - [ ] Check when it is going home, the path shows that it is not going home after four visits? (or maybe a bee is already on the plant?) Check via visualising the interval.
-    - [ ] Refactor all other behaviors to use the same logic as MyBeeBehavior
+
+
+    TODO for other behaviors. 
+    - [ ] After confirming my_behavior is working as intended, refactor all other behaviors to use the same logic as MyBeeBehavior
     """
     
 ################################################################################
