@@ -402,13 +402,12 @@ class MyBee(Bee):
         self.reward_size = 5
         self.reward_memory = deque(maxlen=self.reward_size)
         
-        self.lastest_visited_flowers = deque(maxlen=5)
+        self.latest_visited_flowers = deque(maxlen=5)
         
         self.stomach_capacity = 10.0 # maximum nectar capacity of the bee's stomach
         self.nectar_in_stomach = 0.0 # current nectar in the bee's stomach
         self.homing = False          # whether the bee is currently homing back to the hive
         
-        self.unsuccessful_visits = 0 # count visits to empty flowers
     def add_nectar(self, amount):
         """
         Add nectar to the stomach, without exceeding capacity
@@ -474,8 +473,8 @@ class MyBeeBehavior(BeeBehavior):
                 self.bee.homing = False
                 self.bee.nectar_in_stomach = 0.0
                 self.bee.reward_memory.clear()
-                self.bee.unsuccessful_visits = 0
-                self.bee.lastest_visited_flowers.clear()
+
+                self.bee.latest_visited_flowers.clear()
                 self.theta = None
                 self.get_new_action()
                 return
@@ -488,7 +487,7 @@ class MyBeeBehavior(BeeBehavior):
         
         # 1. Spending time on foraging nectar?
         # 1.1 No
-        if self.bee.forage_timer == 0:
+        if self.bee.forage_timer == 0 and self.bee.on_plant is None:
             
             # 2. Have a set destination cell?
             # 2.1 No, meaning the bee arrived at it's destination or the bee is leaving the hive
@@ -536,19 +535,23 @@ class MyBeeBehavior(BeeBehavior):
                     # 6. Flower to harvest below?
                     # 6.1 Yes
                     if plant and landing:
+
                         # 7. Land and harvest on flower
-                        self.bee.forage_timer = self.bee.forage_timer_max
                         self.bee.on_plant = plant
                         plant.bee_on = self.bee
                         plant.visit_count += 1
                         plant.visit_timestamp.append(self.bee.model.steps)
                         plant.visited = True
                         plant.visited_this_step = True    
-                        plant.leave_scent()
+                        # plant.leave_scent()
+                        
+                        self.bee.latest_visited_flowers.append(self.bee.on_plant)
                         
                         # Transfer nectar from flower to bee
                         nectar_to_collect = min(3, plant.nectar, self.bee.stomach_capacity - self.bee.nectar_in_stomach)
                         if nectar_to_collect > 0:
+                            self.bee.forage_timer = self.bee.forage_timer_max
+                            
                             # Collected nectar, update reward_memory
                             self.bee.reward_memory.append(1)
                             
@@ -557,7 +560,7 @@ class MyBeeBehavior(BeeBehavior):
                             self.bee.add_nectar(nectar_to_collect)
                             
                             # Checking whether the bee is full or has made too many unsuccessful visits
-                            if self.bee.is_full() or self.bee.unsuccessful_visits >= 15:
+                            if self.bee.is_full():
                                 self.bee.homing = True
                                 
                                 # Create Linestring and travel route to beehive
@@ -577,6 +580,9 @@ class MyBeeBehavior(BeeBehavior):
                         elif nectar_to_collect == 0:
                             # Unsuccessful visit, update reward memory queue
                             self.bee.reward_memory.append(0)
+                            if self.bee.on_plant:
+                                self.bee.on_plant.bee_on = None
+                                self.bee.on_plant = None
                             self.get_new_action()
                         else:
                             raise ValueError("Nectar to collect should not be negative.")
@@ -612,14 +618,23 @@ class MyBeeBehavior(BeeBehavior):
                         pass
                     
                     return
-        # 1.2 yes
-        else:
-            self.bee.forage_timer -= 1
-            if self.bee.forage_timer == 0:
-                self.bee.lastest_visited_flowers.append(self.bee.on_plant)
-                self.bee.on_plant.bee_on = None
-                self.bee.on_plant = None
+        # 1.2 yes, currently still foraging
+        elif self.bee.on_plant is not None:
 
+            self.bee.forage_timer -= 1
+            if self.bee.forage_timer == 0: # Max forage timer is 3, meaning three time steps
+
+                self.bee.on_plant.bee_on = None
+                self.bee.on_plant.leave_scent()
+                self.bee.on_plant = None
+                
+                
+                self.get_new_action()
+                
+                if self.bee.travel_route:
+                    next_coord = self.bee.travel_route.pop(0)
+                    next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
+                    self.bee.model.space.move_agent(self.bee, next_coord)
 
     def get_new_action(self):
         # 8. Are any nearby flowers not in the visited list?
@@ -691,21 +706,19 @@ class MyBeeBehavior(BeeBehavior):
         A plant is available if:
         - It is within the bee's vision range
         - It does not have a bee on it (bee_on is None)
-        - It is not in the bee's lastest visited flowers list
+        - It is not in the bee's latest visited flowers list
         
         Note: it will still fly towards a flower even if there is a scent mark on it.
         """
         neighbors = self.bee.model.space.get_neighbors(self.bee.pos, vision_range, include_center=True)
         plant_agents = [agent for agent in neighbors if isinstance(agent, Plant)]
-        available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant not in self.bee.lastest_visited_flowers]
+        available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant not in self.bee.latest_visited_flowers]
         return available_plants
     
     def land_on_flower(self, bee, plant):
         """ 
         Take in the plant object and check if the bee can land on it or not.
         """
-        # PRINT HERE: When there plant has scent mark and bee leaves it
-        # TODO: Add to memory when a bee has not successfully visited a flower
         return bee.random.random() < self.landing_prob and plant.has_scent() is False
     
     
