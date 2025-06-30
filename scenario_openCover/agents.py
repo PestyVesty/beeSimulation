@@ -408,6 +408,11 @@ class MyBee(Bee):
         self.nectar_in_stomach = 0.0 # current nectar in the bee's stomach
         self.homing = False          # whether the bee is currently homing back to the hive
         
+        
+        ########### Debugging and Verification ###########
+        self.turning_angles = []
+        self.jump_distances = []
+        
     def add_nectar(self, amount):
         """
         Add nectar to the stomach, without exceeding capacity
@@ -666,8 +671,14 @@ class MyBeeBehavior(BeeBehavior):
             self.bee.theta = theta_to_flower
 
     def sample_from_biased_distribution(self, max_jump=None):
+        
+        # TODO: Move the biased turn angle here
         delta_theta = self.biased_distribution(self.bee.random, 1)[0]
 
+        ########### Debugging and Verification ###########
+        self.bee.turning_angles.append(delta_theta)
+        ##################################################
+        
         new_theta = (self.bee.theta + delta_theta) % 360
         if new_theta > 180:
             new_theta -= 360
@@ -691,6 +702,10 @@ class MyBeeBehavior(BeeBehavior):
 
         is_long_jump = distance > self.LONG_JUMP_THRESHOLD
 
+        ########### Debugging and Verification ###########
+        self.bee.jump_distances.append(distance)
+        ##################################################
+        
         destination_coord = self.compute_endpoint(self.bee.pos[0], self.bee.pos[1], distance, new_theta)
         bee_path = LineString([self.bee.pos, destination_coord])
 
@@ -727,8 +742,8 @@ class MyBeeBehavior(BeeBehavior):
     """
     Things to check and verify
     - [ ] Bee navigation logic (levy flight)
-        - [ ] Collect and plot the jump distances, ensure it is a negative exponential distribution  
-        - [ ] Collect and plot the turn angles, ensure it matches to the defined distribution 
+        - [x] Collect and plot the jump distances, ensure it is a negative exponential distribution  
+        - [x] Collect and plot the turn angles, ensure it matches to the defined distribution 
         - [ ] What is a long jump, what is a short jump? Determine this in a different file.
     - [x] Bee scanning logic
         - A bee will fly and scan for flowers during regular jumps
@@ -750,9 +765,11 @@ class MyBeeBehavior(BeeBehavior):
     - [x] Landing logic
         - Bees does not land on flowers with scent marks
         - Bees does not land on flowers that have a bee on top of it, which is checked by parameter bee_on that registers the bee that is on the flower
-    - [ ] Homing behavior
-        - [ ] Bees only returns to hive when stomach is full
-    - [ ] Check if the bee Levy flight is working correctly
+    - [x] Homing behavior
+        - [x] Bees only returns to hive when stomach is full
+    - [x] Check if the bee Levy flight is working correctly
+
+
 
     - [ ] Removed reward_memory from beebehavior class to bee itself and reward_size to bee class
 

@@ -48,7 +48,6 @@ class OpenCoverModel(mesa.Model):
                              "Plant visited this step": lambda a: getattr(a, "visited_this_step", False),
                              "Plant nectar amount" : lambda a: getattr(a, "nectar", None), # Amount of nectar at the plant
                              "Plant scent timer": lambda a: getattr(a, "scent_mark_timer", None), # Scent timer of the plant
-                             # FIXME: add "from hive", which corresponds to the beehive the bee is from
                             }   
         )
         
