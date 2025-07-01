@@ -404,10 +404,14 @@ class MyBee(Bee):
         
         self.latest_visited_flowers = deque(maxlen=5)
         
-        self.stomach_capacity = 10.0 # maximum nectar capacity of the bee's stomach
+        self.stomach_capacity = 20.0 # maximum nectar capacity of the bee's stomach
         self.nectar_in_stomach = 0.0 # current nectar in the bee's stomach
         self.homing = False          # whether the bee is currently homing back to the hive
         
+        self.collection_rate = 3
+        
+        self.nectar_to_collect = 0.0
+        self.target_plant = None
         
         ########### Debugging and Verification ###########
         self.turning_angles = []
@@ -426,17 +430,22 @@ class MyPlant(Plant):
     def __init__(self, model):
         super().__init__(model)
         self.scent_mark_timer = 0
-        self.nectar = 8.0 # So flower will be visited at most 3 times
+        self.nectar = 13.0
+        self.max_nectar = 13.0
+        self.replenish_rate = 0.25
         
     def has_scent(self):
         return self.scent_mark_timer > 0
     
-    def leave_scent(self, duration=5):
+    def leave_scent(self, duration=45):
         self.scent_mark_timer = duration
         
     def step(self):
         if self.scent_mark_timer > 0:
             self.scent_mark_timer -= 1
+            
+        if self.nectar < self.max_nectar:
+            self.nectar = min(self.nectar + self.replenish_rate, self.max_nectar)
 
 
 class MyBeeBehavior(BeeBehavior):
@@ -553,16 +562,22 @@ class MyBeeBehavior(BeeBehavior):
                         self.bee.latest_visited_flowers.append(self.bee.on_plant)
                         
                         # Transfer nectar from flower to bee
-                        nectar_to_collect = min(3, plant.nectar, self.bee.stomach_capacity - self.bee.nectar_in_stomach)
+                        nectar_to_collect = min(self.bee.collection_rate, plant.nectar, self.bee.stomach_capacity - self.bee.nectar_in_stomach) #TOD: 
                         if nectar_to_collect > 0:
                             self.bee.forage_timer = self.bee.forage_timer_max
+                            
+                            # Store the plant and nectar to collect
+                            self.bee.target_plant = plant
+                            self.bee.nectar_to_collect = nectar_to_collect                            
+                                                    
+                            
                             
                             # Collected nectar, update reward_memory
                             self.bee.reward_memory.append(1)
                             
-                            # Extract the nectar from the flower
-                            plant.nectar -= nectar_to_collect
-                            self.bee.add_nectar(nectar_to_collect)
+                            # # Extract the nectar from the flower
+                            # plant.nectar -= nectar_to_collect
+                            # self.bee.add_nectar(nectar_to_collect)
                             
                             # Checking whether the bee is full or has made too many unsuccessful visits
                             if self.bee.is_full():
@@ -626,21 +641,44 @@ class MyBeeBehavior(BeeBehavior):
                     return
         # 1.2 yes, currently still foraging
         elif self.bee.on_plant is not None:
-
             self.bee.forage_timer -= 1
-            if self.bee.forage_timer == 0: # Max forage timer is 3, meaning three time steps
+            if self.bee.forage_timer == 0:  # Max forage timer is 3, meaning three time steps
+                
+                # Update the plant nectar amount and bee stomach content
+                if self.bee.target_plant is not None:
+                    self.bee.target_plant.nectar -= self.bee.nectar_to_collect
+                    self.bee.add_nectar(self.bee.nectar_to_collect)
 
+                # Clear temp collection parameters
+                self.bee.nectar_to_collect = 0.0
+                self.bee.target_plant = None
+
+                # Wrap up interaction with flower
                 self.bee.on_plant.bee_on = None
                 self.bee.on_plant.leave_scent()
                 self.bee.on_plant = None
-                
-                
+
                 self.get_new_action()
-                
+
                 if self.bee.travel_route:
                     next_coord = self.bee.travel_route.pop(0)
                     next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
                     self.bee.model.space.move_agent(self.bee, next_coord)
+
+            # self.bee.forage_timer -= 1
+            # if self.bee.forage_timer == 0: # Max forage timer is 3, meaning three time steps
+
+            #     self.bee.on_plant.bee_on = None
+            #     self.bee.on_plant.leave_scent()
+            #     self.bee.on_plant = None
+                
+                
+            #     self.get_new_action()
+                
+            #     if self.bee.travel_route:
+            #         next_coord = self.bee.travel_route.pop(0)
+            #         next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
+            #         self.bee.model.space.move_agent(self.bee, next_coord)
 
     def get_new_action(self):
         # 8. Are any nearby flowers not in the visited list?
@@ -672,7 +710,7 @@ class MyBeeBehavior(BeeBehavior):
 
     def sample_from_biased_distribution(self, max_jump=None):
         
-        # TODO: Move the biased turn angle here
+        # TODO: Move the biased turn angle function here
         delta_theta = self.biased_distribution(self.bee.random, 1)[0]
 
         ########### Debugging and Verification ###########
