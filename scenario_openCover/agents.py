@@ -349,6 +349,7 @@ class Bee(mesa.Agent):
 
         self.forage_timer = 0
         self.forage_timer_max = 3
+
         self.has_pollen = False
         self.pollen_timer = 0
         self.pollen_timer_max = 25
@@ -397,10 +398,6 @@ class Plant(mesa.Agent):
 ################################################################################
 ################################################################################
 ################################################################################
-def debug_bee(msg, bee):
-    uid = getattr(bee, "unique_id", None)
-    if uid in (5, 38) and 15 <= bee.model.steps <= 30:
-        print(f"[t={bee.model.steps}][Bee {uid}] {msg}")
 
 class MyBee(Bee):
     def __init__(self, model, behavior, beehive=None):
@@ -408,18 +405,25 @@ class MyBee(Bee):
         self.reward_size = 5
         self.reward_memory = deque(maxlen=self.reward_size)
         self.latest_visited_flowers = deque(maxlen=5)
-        self.stomach_capacity = 20.0
+        self.stomach_capacity = 10.0 #! original was 20
         self.nectar_in_stomach = 0.0
         self.homing = False
-        self.collection_rate = 3
+        
+        self.collection_rate = 3 # The amount of nectar to collect
+        
         self.nectar_to_collect = 0.0
+        
         self.target_plant = None
         self.nectar_reward_threshold = 1
         self.turning_angles = []
         self.jump_distances = []
         
         self.is_long_jump = False
+        
     def add_nectar(self, amount):
+        # #! printing 
+        # if self.unique_id == 5:
+        #     print(f"added nectar {amount}, stomach has {min(self.nectar_in_stomach + amount, self.stomach_capacity)}")
         self.nectar_in_stomach = min(self.nectar_in_stomach + amount, self.stomach_capacity)
 
     def is_full(self):
@@ -433,41 +437,22 @@ class MyPlant(Plant):
         self.max_nectar = 13.0
         self.replenish_rate = 0.25
         self.reserved_by = None
+        self.scent_duration = 5 #! Original was 45
         
-        self.START = 10
-        self.END = 30
+        # self.START = 10
+        # self.END = 30
 
     def has_scent(self):
         return self.scent_mark_timer > 0
 
-    def leave_scent(self, duration=45):
-        self.scent_mark_timer = duration
+    def leave_scent(self):
+        self.scent_mark_timer = self.scent_duration
 
     def step(self):
-        # current_step = getattr(self.model, "steps", None)
-
-        # # Print out bee_on if bee 5 or 38 is on this plant between step 15 and 30
-        # if (
-        #     self.bee_on is not None 
-        #     and getattr(self.bee_on, "unique_id", None) in (5, 38) 
-        #     and 15 <= current_step <= 30
-        # ):
-        #     print(
-        #         f"[PLANT {self.unique_id}][step={current_step}] bee_on={self.bee_on.unique_id}, "
-        #         f"bee_on.on_plant={self.bee_on.on_plant}, nectar={self.nectar}"
-        #     )
-        #     # Optionally check for inconsistencies
-        #     if self.bee_on.on_plant != self:
-        #         print(
-        #             f"-> Inconsistency: Plant {self.unique_id} thinks bee {self.bee_on.unique_id} is here, but bee does not!"
-        #         )
-        #         # Optionally heal
-        #         self.bee_on = None
-
         
-        if self.model.steps in range(self.START, self.END) and self.pos == (13.0, 2.85):
-            if self.bee_on:
-                print(f"Plant at {self.pos} has bee {self.bee_on.unique_id} at step {self.model.steps -1}")
+        # if self.model.steps in range(self.START, self.END) and self.pos == (13.0, 2.85):
+        #     if self.bee_on:
+        #         print(f"Plant at {self.pos} has bee {self.bee_on.unique_id} at step {self.model.steps -1}")
         
         
         # Usual scent and nectar management
@@ -504,10 +489,8 @@ class MyBeeBehavior(BeeBehavior):
         self.START = 95
         self.END = 140
         
-        # self.START = 65
-        # self.END = 80
-        
         self.BEE_IDS = [5]
+        
         
         if biased_distribution is None:
             self.biased_distribution = lambda n=1: np.random.uniform(-180, 180, size=n)
@@ -515,6 +498,7 @@ class MyBeeBehavior(BeeBehavior):
             self.biased_distribution = biased_distribution
 
     def step(self):
+        
         
         # #! between steps START and END, print states for bee with unique_id
         # if self.bee.model.steps in range(self.START, self.END) and self.bee.unique_id in self.BEE_IDS:
@@ -541,6 +525,8 @@ class MyBeeBehavior(BeeBehavior):
         if self.bee.homing:
             if not self.bee.travel_route:
                 # Arrived at hive
+                # #! printing
+                # print(f"{self.bee.unique_id} released")
                 self.bee.homing = False
                 self.bee.nectar_in_stomach = 0.0
                 self.bee.reward_memory.clear()
@@ -589,10 +575,13 @@ class MyBeeBehavior(BeeBehavior):
                             plant.bee_on = self.bee 
                             
                             nectar_to_collect = min(self.bee.collection_rate, plant.nectar, self.bee.stomach_capacity - self.bee.nectar_in_stomach)
+                            # #! Printing
+                            # if self.bee.unique_id == 5:
+                            #     print(f"Nectar_to_collect: {nectar_to_collect}")
                             
                             if nectar_to_collect > 0:
                                 self.bee.forage_timer = self.bee.forage_timer_max
-                                self.nectar_to_collect = nectar_to_collect
+                                self.bee.nectar_to_collect = nectar_to_collect
                                 self.bee.reward_memory.append(1)
                                 self.new_action_and_move()
                                 
@@ -664,7 +653,6 @@ class MyBeeBehavior(BeeBehavior):
             self.bee.forage_timer -= 1
             
             if self.bee.forage_timer == 0: # Finishe foraging
-                
                 # Update the plant nectar amount and bee stomach content
                 self.bee.on_plant.nectar -=self.bee.nectar_to_collect
                 self.bee.add_nectar(self.bee.nectar_to_collect)
@@ -680,7 +668,8 @@ class MyBeeBehavior(BeeBehavior):
                 # If the bee stomach is full of nectar, then start heading home,
                 # otherwise take enw action
                 if self.bee.is_full():
-                    print("Stomach is full")
+                    # #! print
+                    # print(f"{self.bee.unique_id} stomach is full, with {self.bee.nectar_in_stomach}")
                     self.bee.homing = True
                     bee_path = LineString([self.bee.pos, self.bee.beehive.pos])
                     self.bee.travel_route = self.sample_line(bee_path, 0.7)
@@ -775,9 +764,6 @@ class MyBeeBehavior(BeeBehavior):
         
         destination_coord = self.compute_endpoint(self.bee.pos[0], self.bee.pos[1], distance, new_theta)
         bee_path = LineString([self.bee.pos, destination_coord])
-    
-        if self.bee.model.steps in range(0, 23) and self.bee.unique_id == 5:
-            print(f"Destination Coord {destination_coord}")
         
         if self.bee.model.space.out_of_bounds(pos=destination_coord):
             bee_path = self.handle_wall_collisions(bee_path)
@@ -823,18 +809,7 @@ class MyBeeBehavior(BeeBehavior):
     def new_action_and_move(self):
         self.get_new_action()
         
-        #! Got new action
-        if self.bee.model.steps in range(self.START, self.END) and self.bee.unique_id == 5:
-            print(f"new route {self.bee.travel_route}")
-        
-        # #! New route
-        # if self.bee.model.steps in range(18, 23) and self.bee.unique_id == 5:
-        #     print(f"Step {self.bee.model.steps} new route {self.bee.travel_route}")
         if self.bee.travel_route:
             next_coord = self.bee.travel_route.pop(0)
             next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
             self.bee.model.space.move_agent(self.bee, next_coord)
-        
-        # #! updated new route        
-        # if self.bee.model.steps in range(self.START, self.END) and self.bee.unique_id == 5:    
-        #     print(f"Travel route after moving: {self.bee.travel_route}")
