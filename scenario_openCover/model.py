@@ -40,6 +40,7 @@ class OpenCoverModel(mesa.Model):
                              "Agent Type"    : "agent_type",
                              "unique_id"     : "unique_id",
                              "Forage Timer" : "forage_timer",
+                             "Latest Visited Plant Location": lambda a: [f.pos for f in getattr(a, "latest_visited_flowers", []) if f is not None],
                              "Plot Code"     : lambda a: a.color_code(),
                              "Plant visit count" : "visit_count", # Cumalative count of visits to each plant
                              "Plant visit timestamp" : "visit_timestamp",
