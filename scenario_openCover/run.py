@@ -31,7 +31,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-s", "--steps", type=int,
-        default=2 * 60 * 60,
+        default=5 * 60 * 60,
         help="Number of simulation steps"
     )
     parser.add_argument(

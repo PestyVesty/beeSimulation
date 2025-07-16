@@ -11,26 +11,8 @@ NOTE: use self.random to get a random seeded number
 
 
 TODO: After new bee behavior is implemented and verified, do the following:
-- [ ] Update the documentation in old behaviors
-- [ ] Based on the new behavior, correct the old behaviors (for example, does not skip flowers on the way when doing long jumps)
+- [ ] Use class MyBeeBehavior as template, update PureLevyBehavior, TruncatedLevyBehavior, CompositeLevyBehavior and BiasedCompositeLevyBehavior
 """
-
-class BeeHive(mesa.Agent):
-    """
-    Class representing a beehive in the simulation. Each beehive has bees assigned
-    to it.
-    """
-    def __init__(self, model, my_id):
-        super().__init__(model)
-        self.agent_type = "beehive"
-        self.model = model
-        self.pos = None
-        self.my_id = my_id # TODO: Check if this is needed, or if it should be removed (creating new agents in mesa should just assign a unique ID). If so, the go back to model.py and edit the code.
-
-    def color_code(self):
-        return {"color": "brown", "edgecolors": "none"}
-
-
 class BeeBehavior():
     """
     Base class for bee behaviors. Follows the flow chart of bee behavior from
@@ -91,9 +73,7 @@ class BeeBehavior():
 
     def get_new_action(self):
         raise NotImplementedError("Subclasses must implement get_new_action()")
-
-
-
+ 
     def land_on_flower(self, bee):
         return bee.random.random() < self.landing_prob
 
@@ -189,6 +169,151 @@ class BeeBehavior():
         x1 = x0 + distance * math.cos(angle_rad)
         y1 = y0 + distance * math.sin(angle_rad)
         return x1, y1
+
+class Bee(mesa.Agent):
+    def __init__(self, model, beebehavior: BeeBehavior, beehive):
+        super().__init__(model)
+        self.agent_type = "bee"
+        self.model = model
+        self.behavior = beebehavior
+        self.behavior.bee = self
+        self.space = self.model.space
+        self.beehive = beehive
+        self.beehive_id = beehive.my_id
+        self.pos = None
+
+        self.vision_range = 0.7
+
+        self.forage_timer = 0
+        self.forage_timer_max = 3
+
+        self.has_pollen = False
+        self.pollen_timer = 0
+        self.pollen_timer_max = 25
+
+        self.travel_route = []
+        self.on_plant = None
+        
+        self.last_plant = None
+
+        self.theta = None
+        
+    def step(self):
+        self.behavior.step()
+
+    def color_code(self):
+        if self.beehive_id == 0:
+            return {"color": "white", "edgecolors": "none"}
+        elif self.beehive_id == 1:
+            return {"color": "black", "edgecolors": "none"}
+
+class MyBee(Bee):
+    def __init__(self, model, behavior, beehive=None):
+        super().__init__(model, behavior, beehive)
+        self.reward_size = 5
+        self.reward_memory = deque(maxlen=self.reward_size)
+        self.latest_visited_flowers = deque(maxlen=5)
+        self.stomach_capacity = 20.0 #! original was 20
+        self.nectar_in_stomach = 0.0
+        self.homing = False
+        
+        self.collection_rate = 3 # The amount of nectar to collect
+        
+        self.nectar_to_collect = 0.0
+        
+        self.target_plant = None
+        self.nectar_reward_threshold = 1
+        self.turning_angles = []
+        self.jump_distances = []
+        
+        self.is_long_jump = False
+        
+    def add_nectar(self, amount):
+        # #! printing 
+        # if self.unique_id == 5:
+        #     print(f"added nectar {amount}, stomach has {min(self.nectar_in_stomach + amount, self.stomach_capacity)}")
+        self.nectar_in_stomach = min(self.nectar_in_stomach + amount, self.stomach_capacity)
+
+    def is_full(self):
+        return self.nectar_in_stomach >= self.stomach_capacity
+      
+class Plant(mesa.Agent):
+    def __init__(self, model):
+        super().__init__(model)
+        self.agent_type = "plant"
+
+        self.model = model
+        self.pos = None
+        self.bee_on = None
+
+        self.visit_count = 0   #! remove
+        
+        self.information_duration = 60 * 5          # The amount of time a timestep is recorded in visit_timestamp
+        self.visit_timestamp = deque(maxlen=60 * 5) # Records the number of bees in the last 5 minutes
+        
+        self.visited = False   #! check to remove
+        self.visited_this_step = False #! check to remove
+
+    def step(self):
+        self.visited_this_step = self.bee_on is not None
+
+    def color_code(self):
+        return {"color": "blue", "edgecolors": "none"}
+
+class MyPlant(Plant):
+    def __init__(self, model):
+        super().__init__(model)
+        self.scent_mark_timer = 0
+        self.nectar = 13.0
+        self.max_nectar = 13.0
+        self.replenish_rate = 0.0
+        self.reserved_by = None
+        self.scent_duration = 45
+        
+        # self.START = 10
+        # self.END = 30
+
+    def has_scent(self):
+        return self.scent_mark_timer > 0
+
+    def leave_scent(self):
+        self.scent_mark_timer = self.scent_duration
+
+    def _filter_old_visits(self):
+        """
+        Remove timestamps older than information_duration from self.visit_timestamp.
+        This is called at every simulation step.
+        """
+        current_time = self.model.steps  # or however you track global time
+        while self.visit_timestamp and self.visit_timestamp[0] < current_time - self.information_duration:
+            self.visit_timestamp.popleft()
+    
+    def step(self):
+        
+        # Usual scent and nectar management
+        if self.scent_mark_timer > 0:
+            self.scent_mark_timer -= 1
+
+        if self.nectar < self.max_nectar:
+            self.nectar = min(self.nectar + self.replenish_rate, self.max_nectar)
+        
+        # Update visit_timestamps
+        self._filter_old_visits()
+
+class BeeHive(mesa.Agent):
+    """
+    Class representing a beehive in the simulation. Each beehive has bees assigned
+    to it.
+    """
+    def __init__(self, model, my_id):
+        super().__init__(model)
+        self.agent_type = "beehive"
+        self.model = model
+        self.pos = None
+        self.my_id = my_id # TODO: Check if this is needed, or if it should be removed (creating new agents in mesa should just assign a unique ID). If so, the go back to model.py and edit the code.
+
+    def color_code(self):
+        return {"color": "brown", "edgecolors": "none"}
 
 
 class PureLevyBehavior(BeeBehavior):
@@ -332,152 +457,16 @@ class BiasedCompositeLevyBehavior(BeeBehavior):
         return self.sample_line(bee_path, 0.7), is_long_jump
 
 
-
-class Bee(mesa.Agent):
-    def __init__(self, model, beebehavior: BeeBehavior, beehive):
-        super().__init__(model)
-        self.agent_type = "bee"
-        self.model = model
-        self.behavior = beebehavior
-        self.behavior.bee = self
-        self.space = self.model.space
-        self.beehive = beehive
-        self.beehive_id = beehive.my_id
-        self.pos = None
-
-        self.vision_range = 0.7
-
-        self.forage_timer = 0
-        self.forage_timer_max = 3
-
-        self.has_pollen = False
-        self.pollen_timer = 0
-        self.pollen_timer_max = 25
-
-        self.travel_route = []
-        self.on_plant = None
-        
-        self.last_plant = None
-
-        self.theta = None
-
-        self.have_target = False
-        self.target_flower = None
-        
-    def step(self):
-        self.behavior.step()
-
-    def color_code(self):
-        if self.beehive_id == 0:
-            return {"color": "white", "edgecolors": "none"}
-        elif self.beehive_id == 1:
-            return {"color": "black", "edgecolors": "none"}
-
-
-class Plant(mesa.Agent):
-    def __init__(self, model):
-        super().__init__(model)
-        self.agent_type = "plant"
-
-        self.model = model
-        self.pos = None
-        self.bee_on = None
-
-        self.visit_count = 0
-        self.visit_timestamp = []
-
-        self.visited = False
-        self.visited_this_step = False
-
-    def step(self):
-        self.visited_this_step = self.bee_on is not None
-
-    def color_code(self):
-        return {"color": "blue", "edgecolors": "none"}
-
-################################################################################
-################################################################################
-################################################################################
-
-class MyBee(Bee):
-    def __init__(self, model, behavior, beehive=None):
-        super().__init__(model, behavior, beehive)
-        self.reward_size = 5
-        self.reward_memory = deque(maxlen=self.reward_size)
-        self.latest_visited_flowers = deque(maxlen=5)
-        self.stomach_capacity = 10.0 #! original was 20
-        self.nectar_in_stomach = 0.0
-        self.homing = False
-        
-        self.collection_rate = 3 # The amount of nectar to collect
-        
-        self.nectar_to_collect = 0.0
-        
-        self.target_plant = None
-        self.nectar_reward_threshold = 1
-        self.turning_angles = []
-        self.jump_distances = []
-        
-        self.is_long_jump = False
-        
-    def add_nectar(self, amount):
-        # #! printing 
-        # if self.unique_id == 5:
-        #     print(f"added nectar {amount}, stomach has {min(self.nectar_in_stomach + amount, self.stomach_capacity)}")
-        self.nectar_in_stomach = min(self.nectar_in_stomach + amount, self.stomach_capacity)
-
-    def is_full(self):
-        return self.nectar_in_stomach >= self.stomach_capacity
-
-class MyPlant(Plant):
-    def __init__(self, model):
-        super().__init__(model)
-        self.scent_mark_timer = 0
-        self.nectar = 13.0
-        self.max_nectar = 13.0
-        self.replenish_rate = 0.25
-        self.reserved_by = None
-        self.scent_duration = 5 #! Original was 45
-        
-        # self.START = 10
-        # self.END = 30
-
-    def has_scent(self):
-        return self.scent_mark_timer > 0
-
-    def leave_scent(self):
-        self.scent_mark_timer = self.scent_duration
-
-    def step(self):
-        
-        # if self.model.steps in range(self.START, self.END) and self.pos == (13.0, 2.85):
-        #     if self.bee_on:
-        #         print(f"Plant at {self.pos} has bee {self.bee_on.unique_id} at step {self.model.steps -1}")
-        
-        
-        # Usual scent and nectar management
-        if self.scent_mark_timer > 0:
-            self.scent_mark_timer -= 1
-
-        if self.nectar < self.max_nectar:
-            self.nectar = min(self.nectar + self.replenish_rate, self.max_nectar)
-
 class MyBeeBehavior(BeeBehavior):
     """
     An extension of BiasedCompositeLevyBehavior. The differences:
-    - [ ] Homing behavior: Bee flies back to hive either: 
-            - [x] 1) the stomach is full
-            - [ ] 2) unsuccessful visits reaches 15.
-            After bee reaches the hive, wait for 5 steps before releasing it back
-            into the environment as a "new" bee.
-    - [x] Flower memory: Each bee will have a memory of the last five flowers they have visited.
-    - [x] Flower behavior: Set the flower has 3 micro liters of nectar. Each visits by
-                           bee it will take 1 micro liters of nectar. Each visit time
-                           is set to 3 steps.
-    - [x] Scent marking: after a bee has successfully foraged, it will leave a decaying
-                         scent mark. Other bees will be able to detect the scent mark when
-                         they are above it and does not land on it. After 5 steps, the scent
-                         mark will disappear.
+    - Homing behavior: Bee flies back to hive only when it's stomach is full
+    - Flower memory: Each bee will have a memory of the last five flowers they have visited.
+    - Flower behavior: Flower has a set amount of nectar. Each visit time a bee
+                           visits a flower with nectar, regardless how much nectar it has, it will
+                           always take 3 timesteps to forage.
+    - Scent marking: When a bee lands on a flower, a scent will be left on the flower, regardless
+                         whether the bee has foraged or not.
                          
     What I expect when running this behavior in an empty environment: the bee will perform five
     short jumps before making one long jump. After that, it will repeat the process.
@@ -573,6 +562,12 @@ class MyBeeBehavior(BeeBehavior):
                         if landing:
                             self.bee.on_plant = plant
                             plant.bee_on = self.bee 
+                            
+                            # Update the timestamp when bee lands on the plant
+                            plant.visit_timestamp.append(self.bee.model.steps)
+                            # #! Printing
+                            # if self.bee.unique_id == 5:
+                            #     print(f"Update plant visit_timestamp: {plant.visit_timestamp}")
                             
                             nectar_to_collect = min(self.bee.collection_rate, plant.nectar, self.bee.stomach_capacity - self.bee.nectar_in_stomach)
                             # #! Printing
