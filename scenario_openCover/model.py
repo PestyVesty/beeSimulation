@@ -43,7 +43,7 @@ class OpenCoverModel(mesa.Model):
                              "Latest Visited Plant Location": lambda a: [f.pos for f in getattr(a, "latest_visited_flowers", []) if f is not None],
                              "Plot Code"     : lambda a: a.color_code(),
                              "Plant visit count" : "visit_count", # Cumalative count of visits to each plant
-                             "Plant visit timestamp" : "visit_timestamp",
+                             "Plant visit timestamp": lambda a: list(getattr(a, "visit_timestamp", [])),
                              "BeeHive ID" : "beehive_id",
                              "Plant visited:" : "visited", # Boolean
                              "Plant visited this step": lambda a: getattr(a, "visited_this_step", False),
@@ -185,7 +185,7 @@ class BlankModel(mesa.Model):
         #! TODO: Decide what to collect
         self.datacollector = DataCollector(
             model_reporters={},  # Collecting the positions of the agents
-            agent_reporters={"Bee Positions" : "pos", 
+            agent_reporters={"Bee Positions" : "pos", # TODO: Change this from Bee Positions to Positions
                              "Agent Type"    : "agent_type",
                              "unique_id"     : "unique_id",
                              "Forage Timer" : "forage_timer",

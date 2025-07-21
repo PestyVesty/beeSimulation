@@ -289,8 +289,12 @@ class MyPlant(Plant):
             self.visit_timestamp.popleft()
     
     def step(self):
+        #! Print
+        # if self.model.steps in range(0, 3) and self.unique_id == 123:
         
-        # Usual scent and nectar management
+        #     current_step = self.model.steps-1
+        #     print(f"{current_step} plant {self.unique_id} has visited history {self.visit_timestamp}")  
+        
         if self.scent_mark_timer > 0:
             self.scent_mark_timer -= 1
 
@@ -487,7 +491,6 @@ class MyBeeBehavior(BeeBehavior):
             self.biased_distribution = biased_distribution
 
     def step(self):
-        
         
         # #! between steps START and END, print states for bee with unique_id
         # if self.bee.model.steps in range(self.START, self.END) and self.bee.unique_id in self.BEE_IDS:
