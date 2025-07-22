@@ -5,15 +5,14 @@ from shapely.geometry import LineString
 import numpy as np
 
 class OpenCoverModel(mesa.Model):
-    # def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0, reward_size=5):
     def __init__(self, n_agents=60, seed=None, bee_behavior="composite_levy", landing_prob=1.0, replenish_rate=0.0):
         super().__init__(seed=seed)
         
         self.bee_behavior = bee_behavior
         self.landing_prob = landing_prob
-        # self.reward_size = reward_size
         self.n_agents = n_agents
         self.replenish_rate = replenish_rate
+
         # Initiate the environment space
         self.space_width = 2.85 * 4
         self.space_length = 10 + 100 + 10
@@ -36,16 +35,16 @@ class OpenCoverModel(mesa.Model):
         #! TODO: Decide what to collect
         self.datacollector = DataCollector(
             model_reporters={},  # Collecting the positions of the agents
-            agent_reporters={"Bee Positions" : "pos", 
+            agent_reporters={"Position" : "pos", 
                              "Agent Type"    : "agent_type",
                              "unique_id"     : "unique_id",
                              "Forage Timer" : "forage_timer",
-                             "Latest Visited Plant Location": lambda a: [f.pos for f in getattr(a, "latest_visited_flowers", []) if f is not None],
+                            #  "Latest Visited Plant Location": lambda a: [f.pos for f in getattr(a, "latest_visited_flowers", []) if f is not None],
                              "Plot Code"     : lambda a: a.color_code(),
-                             "Plant visit count" : "visit_count", # Cumalative count of visits to each plant
+                            #  "Plant visit count" : "visit_count", # Cumalative count of visits to each plant
                              "Plant visit timestamp": lambda a: list(getattr(a, "visit_timestamp", [])),
                              "BeeHive ID" : "beehive_id",
-                             "Plant visited:" : "visited", # Boolean
+                            #  "Plant visited:" : "visited", # Boolean
                              "Plant visited this step": lambda a: getattr(a, "visited_this_step", False),
                              "Plant nectar amount" : lambda a: getattr(a, "nectar", None), # Amount of nectar at the plant
                              "Plant scent timer": lambda a: getattr(a, "scent_mark_timer", None), # Scent timer of the plant
