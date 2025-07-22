@@ -6,14 +6,14 @@ import numpy as np
 
 class OpenCoverModel(mesa.Model):
     # def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0, reward_size=5):
-    def __init__(self, n_agents = 60, seed = None, bee_behavior="composite_levy", landing_prob=1.0):
+    def __init__(self, n_agents=60, seed=None, bee_behavior="composite_levy", landing_prob=1.0, replenish_rate=0.0):
         super().__init__(seed=seed)
         
         self.bee_behavior = bee_behavior
         self.landing_prob = landing_prob
         # self.reward_size = reward_size
         self.n_agents = n_agents
-
+        self.replenish_rate = replenish_rate
         # Initiate the environment space
         self.space_width = 2.85 * 4
         self.space_length = 10 + 100 + 10
@@ -135,9 +135,9 @@ class OpenCoverModel(mesa.Model):
             coord3 = (x_coord, y * 3)
             
             if self.bee_behavior == "my_behavior":
-                plant1 = MyPlant(self)
-                plant2 = MyPlant(self)
-                plant3 = MyPlant(self)
+                plant1 = MyPlant(self, replenish_rate=self.replenish_rate)
+                plant2 = MyPlant(self, replenish_rate=self.replenish_rate)
+                plant3 = MyPlant(self, replenish_rate=self.replenish_rate)
             else:
                 plant1 = Plant(self)
                 plant2 = Plant(self)

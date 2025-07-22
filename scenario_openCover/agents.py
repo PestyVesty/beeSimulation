@@ -261,12 +261,12 @@ class Plant(mesa.Agent):
         return {"color": "blue", "edgecolors": "none"}
 
 class MyPlant(Plant):
-    def __init__(self, model):
+    def __init__(self, model, replenish_rate=0.0):
         super().__init__(model)
         self.scent_mark_timer = 0
         self.nectar = 13.0
         self.max_nectar = 13.0
-        self.replenish_rate = 0.0
+        self.replenish_rate = replenish_rate
         self.reserved_by = None
         self.scent_duration = 45
         
@@ -298,9 +298,9 @@ class MyPlant(Plant):
         if self.scent_mark_timer > 0:
             self.scent_mark_timer -= 1
 
-        if self.nectar < self.max_nectar:
+        if self.nectar < self.max_nectar:            
             self.nectar = min(self.nectar + self.replenish_rate, self.max_nectar)
-        
+
         # Update visit_timestamps
         self._filter_old_visits()
 
@@ -797,13 +797,44 @@ class MyBeeBehavior(BeeBehavior):
         available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant not in self.bee.latest_visited_flowers]
         return available_plants
     
+    # def land_on_flower(self, bee, plant):
+    #     """ 
+    #     Take in the plant object and check if the bee can land on it or not.
+    #     """
+    #     return bee.random.random() < self.landing_prob and plant.has_scent() is False
+    
     def land_on_flower(self, bee, plant):
-        """ 
-        Take in the plant object and check if the bee can land on it or not.
         """
-        return bee.random.random() < self.landing_prob and plant.has_scent() is False
-    
-    
+        Bees land on flowers with probability depending on their x-position.
+        Must also satisfy scent constraint.
+        """
+        x = bee.pos[0]
+
+        # Spatial landing probability zones (hardcoded)
+        if (10 <= x <= 20) or (140 <= x <= 150):
+            prob = 1.0
+        elif (20 < x <= 30) or (130 < x <= 140):
+            prob = 0.95
+        elif (30 < x <= 40) or (120 < x <= 130):
+            prob = 0.90
+        elif (40 < x <= 50) or (110 < x <= 120):
+            prob = 0.85
+        elif (50 < x <= 60) or (100 < x <= 110):
+            prob = 0.80
+        elif (60 < x <= 70) or (90 < x <= 100):
+            prob = 0.75
+        elif (70 < x <= 80) or (80 < x <= 90):
+            prob = 0.70
+        else:
+            prob = 0.0  # Default: no landing outside defined ranges
+
+        # Must not land on scented flower
+        if plant.has_scent():
+            return False
+
+        # Final probabilistic landing decision
+        return bee.random.random() < prob
+
     def new_action_and_move(self):
         self.get_new_action()
         
