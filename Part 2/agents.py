@@ -12,6 +12,10 @@ NOTE: use self.random to get a random seeded number
 
 TODO: After new bee behavior is implemented and verified, do the following:
 - [ ] Use class MyBeeBehavior as template, update PureLevyBehavior, TruncatedLevyBehavior, CompositeLevyBehavior and BiasedCompositeLevyBehavior
+
+Currently MyBeeBehavior works as expected.
+Currently temperature is hard coded into the simulation. Eg: 0 to 10m into the polytunnel, bees have 100% chance to land on a flower,
+10m to 20m into the polytunnel, bees have 95% chance to land on a flower...so on so forth.
 """
 class BeeBehavior():
     """
