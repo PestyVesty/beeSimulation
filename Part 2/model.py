@@ -69,7 +69,7 @@ class OpenCoverModel(mesa.Model):
         self.space.place_agent(beehive, coord)
         biased_distribution = None
         # Prepare biased distribution for biased_composite (outside bee loop!)
-        if self.bee_behavior in ["biased_composite", "my_behavior"]:
+        if self.bee_behavior in ["biased_composite", "resource_aware", "nearest_flower"]:
             x_discrete = np.array([-180, -135, -90, -45, 0, 45, 90, 135, 180])
             y_discrete = np.array([0.06, 0.07, 0.13, 0.17, 0.20, 0.17, 0.13, 0.07, 0.06])
             x_fine = np.linspace(-180, 180, 1000)
@@ -99,7 +99,7 @@ class OpenCoverModel(mesa.Model):
                 beeBehavior = PureLevyBehavior(landing_prob=self.landing_prob)
             elif self.bee_behavior == "truncated_levy":
                 beeBehavior = TruncatedLevyBehavior(landing_prob=self.landing_prob)
-            elif self.bee_behavior == "my_behavior":
+            elif self.bee_behavior == "resource_aware":
                 beeBehavior = MyBeeBehavior(
                     landing_prob=self.landing_prob,
                     # reward_size=self.reward_size,
@@ -109,7 +109,7 @@ class OpenCoverModel(mesa.Model):
                 raise ValueError(f"Unknown bee behavior: {self.bee_behavior}")
 
             # Create the bee agent
-            if self.bee_behavior == "my_behavior":
+            if self.bee_behavior in ["biased_composite", "resource_aware", "nearest_flower"]:
                 bee = MyBee(self, beeBehavior, beehive=beehive)
             else:
                 bee = Bee(self, beeBehavior, beehive=beehive)
@@ -134,7 +134,7 @@ class OpenCoverModel(mesa.Model):
             coord2 = (x_coord, y * 2)
             coord3 = (x_coord, y * 3)
             
-            if self.bee_behavior == "my_behavior":
+            if self.bee_behavior in ["biased_composite", "resource_aware", "nearest_flower"]:
                 plant1 = MyPlant(self, replenish_rate=self.replenish_rate)
                 plant2 = MyPlant(self, replenish_rate=self.replenish_rate)
                 plant3 = MyPlant(self, replenish_rate=self.replenish_rate)
@@ -217,7 +217,7 @@ class BlankModel(mesa.Model):
         self.space.place_agent(beehive, coord)
         biased_distribution = None
         # Prepare biased distribution for biased_composite (outside bee loop!)
-        if self.bee_behavior in ["biased_composite", "my_behavior"]:
+        if self.bee_behavior in ["biased_composite", "resource_aware", "nearest_flower"]:
             x_discrete = np.array([-180, -135, -90, -45, 0, 45, 90, 135, 180])
             y_discrete = np.array([0.06, 0.07, 0.13, 0.17, 0.20, 0.17, 0.13, 0.07, 0.06])
             x_fine = np.linspace(-180, 180, 1000)
@@ -247,7 +247,7 @@ class BlankModel(mesa.Model):
                 beeBehavior = PureLevyBehavior(landing_prob=self.landing_prob)
             elif self.bee_behavior == "truncated_levy":
                 beeBehavior = TruncatedLevyBehavior(landing_prob=self.landing_prob)
-            elif self.bee_behavior == "my_behavior":
+            elif self.bee_behavior == "resource_aware":
                 beeBehavior = MyBeeBehavior(
                     landing_prob=self.landing_prob,
                     # reward_size=self.reward_size,
@@ -257,7 +257,7 @@ class BlankModel(mesa.Model):
                 raise ValueError(f"Unknown bee behavior: {self.bee_behavior}")
 
             # Create the bee agent
-            if self.bee_behavior == "my_behavior":
+            if self.bee_behavior in ["biased_composite", "resource_aware", "nearest_flower"]:
                 bee = MyBee(self, beeBehavior, beehive=beehive)
             else:
                 bee = Bee(self, beeBehavior, beehive=beehive)

@@ -9,53 +9,72 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run batch simulations of the bee model.")
     parser.add_argument(
         "-b", "--behavior", type=str,
-        choices=["pure_levy", "truncated_levy", "composite_levy", "biased_composite", "my_behavior", "all"],
+        choices=[
+            "pure_levy",
+            "truncated_levy",
+            "composite_levy",
+            "biased_composite",
+            "resource_aware",
+            "comparative_rewards", 
+            "all"
+        ],
         default="composite_levy"
     )
     parser.add_argument(
         "-lp", "--landing_prob", type=float,
-        default=1.0
+        default=1.0,
+        help="Probability of landing when a valid flower is under the bee."
     )
-    # parser.add_argument(
-    #     "-rs", "--reward_size", type=int,
-    #     default=5
-    # )
+    parser.add_argument(
+        "-rs", "--reward_size", type=int,
+        default=5,
+        help="Length of the reward memory window (used by behaviors that rely on reward memory)."
+    )
     parser.add_argument(
         "-na", "--n_agents", type=int,
-        default=60
+        default=60,
+        help="Number of bee agents."
     )
     parser.add_argument(
         "-i", "--iterations", type=int,
         default=5,
-        help="Number of times each parameter set is repeated"
+        help="Number of different random seeds (repetitions) for each parameter set."
     )
     parser.add_argument(
         "-s", "--steps", type=int,
         default=5 * 60 * 60,
-        help="Number of simulation steps"
+        help="Number of simulation steps."
     )
     parser.add_argument(
         "-np", "--num_processes", type=int,
         default=10,
-        help="Number of processes to run in parallel. Use None to use all CPUs"
+        help="Number of processes to run in parallel. Use None to use all CPUs."
     )
     args = parser.parse_args()
 
     # Determine which behaviors to run
     if args.behavior == "all":
-        behaviors_to_run = ["pure_levy", "truncated_levy", "composite_levy", "biased_composite", "my_behavior"]
+        behaviors_to_run = [
+            "pure_levy",
+            "truncated_levy",
+            "composite_levy",
+            "biased_composite",
+            "resource_aware",
+            "comparative_rewards",
+            "nearest_flower"
+        ]
     else:
         behaviors_to_run = [args.behavior]
 
     for behavior in behaviors_to_run:
         print(f"\n=== Running behavior: {behavior} ===\n")
 
-        # Define parameter dictionary for batch_run
+        # Parameter dictionary for batch_run -> must match OpenCoverModel.__init__
         param_dict = {
             "n_agents": args.n_agents,
             "bee_behavior": behavior,
             "landing_prob": args.landing_prob,
-            # "reward_size": args.reward_size,
+            "reward_size": args.reward_size,  # safe to pass if your model forwards it to the behavior/bee
             "seed": range(args.iterations)
         }
 
@@ -69,30 +88,13 @@ if __name__ == "__main__":
             display_progress=True
         )
 
-        # Save results
+        # Save results (pkl of the raw list, plus a CSV convenience export)
         df = pd.DataFrame(results)
-        output_filename = f"batch_results_{behavior}.pkl"
-        with open(output_filename, "wb") as f:
+        pkl_name = f"batch_results_{behavior}.pkl"
+        csv_name = f"batch_results_{behavior}.csv"
+
+        with open(pkl_name, "wb") as f:
             pickle.dump(results, f)
-        print(f"Simulation complete. Results saved to {output_filename}")
+        df.to_csv(csv_name, index=False)
 
-    
-
-    # # Initialize the model with parsed arguments
-    # sim_model = OpenCoverModel(
-    #     seed=0,
-    #     bee_behavior=args.behavior,
-    #     landing_prob=args.landing_prob,
-    #     reward_size=args.reward_size,
-    #     n_agents=args.n_agents
-    # )
-
-    # model = OpenCoverModel(seed=0)  # Initialize the model with a seed
-    # for i in tqdm.tqdm(range(7 * 60 * 60)):  # Run the model for 500 steps
-    #     model.step()
-        
-    # df = model.datacollector.get_agent_vars_dataframe()
-    
-    # with open(f"simulation_data_{argparse.behavior}.pkl", "wb") as f:
-    #     pickle.dump(df, f)
-    # print("Model finished running.")
+        print(f"Simulation complete. Results saved to {pkl_name} and {csv_name}")

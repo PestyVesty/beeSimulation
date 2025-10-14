@@ -9,7 +9,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run batch simulations of the bee model.")
     parser.add_argument(
         "-b", "--behavior", type=str,
-        choices=["pure_levy", "truncated_levy", "composite_levy", "biased_composite", "my_behavior", "all"],
+        choices=["pure_levy", "truncated_levy", "composite_levy", "biased_composite", "resource_aware", "all"],
         default="composite_levy"
     )
     parser.add_argument(
@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     # Determine which behaviors to run
     if args.behavior == "all":
-        behaviors_to_run = ["pure_levy", "truncated_levy", "composite_levy", "biased_composite", "my_behavior"]
+        behaviors_to_run = ["pure_levy", "truncated_levy", "composite_levy", "biased_composite", "resource_aware"]
     else:
         behaviors_to_run = [args.behavior]
 
