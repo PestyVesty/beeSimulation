@@ -7,15 +7,18 @@ import numpy as np
 import pdf_library
 
 class OpenCoverModel(mesa.Model):
-    def __init__(self, n_agents=60, seed=None, bee_behavior="resource_aware", landing_prob=1.0, replenish_rate=0.0, reward_size=5):
+    def __init__(self, n_agents=60, seed=None, bee_behavior="resource_aware", landing_prob=1.0, replenish_rate=0.0, reward_size=5, interval=1):
         super().__init__(seed=seed)
 
         self.bee_behavior = bee_behavior
         self.landing_prob = landing_prob
         self.n_agents = n_agents
         self.replenish_rate = replenish_rate
-        self.reward_size = reward_size  # NEW: pass reward memory window length to bees
+        self.reward_size = reward_size
 
+        self.interval = interval
+        
+        
         # Initialize space
         self.space_width = 2.85 * 4
         self.space_length = 10 + 100 + 10
@@ -36,7 +39,13 @@ class OpenCoverModel(mesa.Model):
 
         # Set up data collector
         self.datacollector = DataCollector(
-            model_reporters={},
+            model_reporters={
+                "Step": lambda m: m.steps,
+                "Interval": lambda m: m.interval,
+                "Behavior": lambda m: m.bee_behavior,
+                "Replenish": lambda m: m.replenish_rate,
+                "RewardSize": lambda m: m.reward_size,
+                },
             agent_reporters={
                 "Position": "pos",
                 "Agent Type": "agent_type",
@@ -63,9 +72,12 @@ class OpenCoverModel(mesa.Model):
     def step(self):
         #! Adding the following code for terminating the simulation may break animation code
         
-        # TODO: step % timeframe_variable
+
         self.agents.shuffle_do("step")
-        self.datacollector.collect(self)
+
+
+        if self.steps % self.interval == 0:
+            self.datacollector.collect(self)
 
     def create_beehive_bees_agents(self, n_agents, coord, my_id):
         beehive = BeeHive(self, my_id)
@@ -93,11 +105,8 @@ class OpenCoverModel(mesa.Model):
             else:
                 raise ValueError(f"Unknown or unsupported bee behavior: {self.bee_behavior}")
 
-            bee = MyBee(self, bee_behavior, beehive=beehive)
+            bee = MyBee(self, bee_behavior, beehive=beehive, reward_size = self.reward_size)
             bee.theta = 0.0
-
-            # NEW: ensure reward window length is set on the bee (used by behavior logic)
-            bee.reward_size = self.reward_size
 
             self.space.place_agent(bee, coord)
 

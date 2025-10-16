@@ -41,7 +41,7 @@ class BeeBehavior():
                     if self.bee.is_long_jump:
                         self.get_new_action()
                         self.bee.is_long_jump = False
-                        if hasattr(self, "reward_memory"):
+                        if hasattr(self.bee, "reward_memory"): # EDIT
                             self.bee.reward_memory = []
                         return
 
@@ -58,14 +58,14 @@ class BeeBehavior():
                         plant.visit_timestamp.append(self.bee.model.steps)
                         plant.visited = True
                         plant.visited_this_step = True
-                        if hasattr(self, "reward_memory"):
+                        if hasattr(self.bee, "reward_memory"): # EDIT
                             self.bee.reward_memory.append(1)
                     else:
-                        if hasattr(self, "reward_memory"):
+                        if hasattr(self.bee, "reward_memory"): # EDIT
                             self.bee.reward_memory.append(0)
                         self.get_new_action()
 
-                    if hasattr(self, "reward_memory") and hasattr(self, "reward_size"):
+                    if hasattr(self.bee, "reward_memory") and hasattr(self.bee, "reward_size"): # EDIT
                         if len(self.bee.reward_memory) > self.bee.reward_size:
                             self.bee.reward_memory.pop(0)
         else:
@@ -214,9 +214,9 @@ class Bee(mesa.Agent):
 
 
 class MyBee(Bee):
-    def __init__(self, model, behavior, beehive=None):
+    def __init__(self, model, behavior, beehive, reward_size):
         super().__init__(model, behavior, beehive)
-        self.reward_size = 5
+        self.reward_size = reward_size
         self.reward_memory = deque(maxlen=self.reward_size)
         self.latest_visited_flowers = deque(maxlen=5)
         self.latest_visited_flowers_steps = deque(maxlen=5)
