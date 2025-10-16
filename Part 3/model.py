@@ -50,11 +50,11 @@ class OpenCoverModel(mesa.Model):
                 "Plant scent timer": lambda a: getattr(a, "scent_mark_timer", None),
                 "Bee latest visited plant": lambda a: [(float(p.pos[0]), float(p.pos[1])) for p in (getattr(a, "latest_visited_flowers", []) or []) if getattr(p, "pos", None) is not None],
                 "Bee latest visited plant step": "latest_visited_flowers_steps",
-                "Reward window mean": lambda a: (np.mean(a.reward_memory)
-                                                 if hasattr(a, "reward_memory") and len(a.reward_memory) == a.reward_size
-                                                 else None),
-                "Long jump": lambda a: getattr(a, "is_long_jump", False),     # set where you choose the step
-                "Jump length": lambda a: getattr(a, "last_jump_length", None) # optional, for QC
+                # "Reward window mean": lambda a: (np.mean(a.reward_memory)
+                #                                  if hasattr(a, "reward_memory") and len(a.reward_memory) == a.reward_size
+                #                                  else None),
+                # "Long jump": lambda a: getattr(a, "is_long_jump", False),     # set where you choose the step
+                # "Jump length": lambda a: getattr(a, "last_jump_length", None) # optional, for QC
             }
         )
 
@@ -62,8 +62,8 @@ class OpenCoverModel(mesa.Model):
 
     def step(self):
         #! Adding the following code for terminating the simulation may break animation code
-        # TODO: Terminate the simulation when 80% of the flowers are depleted with nectar
         
+        # TODO: step % timeframe_variable
         self.agents.shuffle_do("step")
         self.datacollector.collect(self)
 
@@ -106,29 +106,29 @@ class OpenCoverModel(mesa.Model):
         end_x = 110
         y = 2.85
 
-        for x_coord in np.arange(start_x, end_x + 1, 0.5):
+        for x_coord in np.arange(start_x, end_x + 1, 1):  # NOTE: When changing the inter-section from 0.5 to 1, nectar amount deplenish at a faster rate, this is because having at 0.5 allows bees to row follow better, since the visual range is 0.7m.
             for row in [1, 2, 3]:
                 plant = MyPlant(self, replenish_rate=self.replenish_rate)
                 plant.on_placement()
                 self.space.place_agent(plant, (x_coord, y * row))
 
-                # Y-axis offset
-                plant = MyPlant(self, replenish_rate=self.replenish_rate)
-                plant.on_placement()
-                self.space.place_agent(plant, (x_coord, y * row + 0.2))
+                # # Y-axis offset
+                # plant = MyPlant(self, replenish_rate=self.replenish_rate)
+                # plant.on_placement()
+                # self.space.place_agent(plant, (x_coord, y * row + 0.2))
                 
-                plant = MyPlant(self, replenish_rate=self.replenish_rate)
-                plant.on_placement()
-                self.space.place_agent(plant, (x_coord, y * row - 0.2))
+                # plant = MyPlant(self, replenish_rate=self.replenish_rate)
+                # plant.on_placement()
+                # self.space.place_agent(plant, (x_coord, y * row - 0.2))
                 
-                # X-axis offset
-                plant = MyPlant(self, replenish_rate=self.replenish_rate)
-                plant.on_placement()
-                self.space.place_agent(plant, (x_coord + 0.2, y * row ))
+                # # X-axis offset
+                # plant = MyPlant(self, replenish_rate=self.replenish_rate)
+                # plant.on_placement()
+                # self.space.place_agent(plant, (x_coord + 0.2, y * row ))
                 
-                plant = MyPlant(self, replenish_rate=self.replenish_rate)
-                plant.on_placement()
-                self.space.place_agent(plant, (x_coord  - 0.2, y * row))
+                # plant = MyPlant(self, replenish_rate=self.replenish_rate)
+                # plant.on_placement()
+                # self.space.place_agent(plant, (x_coord  - 0.2, y * row))
 
 
 

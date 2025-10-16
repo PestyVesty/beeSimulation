@@ -78,7 +78,7 @@ class BeeBehavior():
     def get_new_action(self):
         raise NotImplementedError("Subclasses must implement get_new_action()")
  
-    def land_on_flower(self, bee, plant = None):
+    def land_on_flower(self, bee):
         return bee.random.random() < self.landing_prob
 
     def levy_pure_sample(self, mu=2.0, l_min=0.7):
@@ -234,7 +234,6 @@ class MyBee(Bee):
         self.jump_distances = []
         
         self.is_long_jump = False
-        self.last_jump_length = 0.0
         
         self.last_sugar_concentration = None
         
@@ -649,11 +648,6 @@ class MyBeeBehavior(BeeBehavior):
                     
                     dx = random_plant.pos[0] - self.bee.pos[0]
                     dy = random_plant.pos[1] - self.bee.pos[1]
-                    
-                    hop_dist = math.hypot(dx, dy)
-                    self.bee.last_jump_length = float(hop_dist)
-                    self.bee.is_long_jump = bool(hop_dist > self.LONG_JUMP_THRESHOLD)
-                    
                     theta_to_flower = math.degrees(math.atan2(dy, dx))
                     theta_to_flower = (theta_to_flower + 180) % 360 - 180
                     self.bee.theta = theta_to_flower
@@ -749,10 +743,6 @@ class MyBeeBehavior(BeeBehavior):
 
             dx = random_plant.pos[0] - self.bee.pos[0]
             dy = random_plant.pos[1] - self.bee.pos[1]
-            hop_dist = math.hypot(dx, dy)
-            self.bee.last_jump_length = float(hop_dist)
-            self.bee.is_long_jump = bool(hop_dist > self.LONG_JUMP_THRESHOLD)
-            
             theta_to_flower = math.degrees(math.atan2(dy, dx))
 
             if theta_to_flower > 180:
@@ -794,9 +784,6 @@ class MyBeeBehavior(BeeBehavior):
 
         is_long_jump = distance > self.LONG_JUMP_THRESHOLD
 
-        self.bee.last_jump_length = float(distance)
-        self.bee.is_long_jump = bool(is_long_jump)
-        
         ########### Debugging and Verification ###########
         self.bee.jump_distances.append(distance)
         ##################################################
@@ -1012,11 +999,6 @@ class ComparativeRewards(BeeBehavior):
                     
                     dx = random_plant.pos[0] - self.bee.pos[0]
                     dy = random_plant.pos[1] - self.bee.pos[1]
-
-                    hop_dist = math.hypot(dx, dy)
-                    self.bee.last_jump_length = float(hop_dist)
-                    self.bee.is_long_jump = bool(hop_dist > self.LONG_JUMP_THRESHOLD)
-                    
                     theta_to_flower = math.degrees(math.atan2(dy, dx))
                     theta_to_flower = (theta_to_flower + 180) % 360 - 180
                     self.bee.theta = theta_to_flower
@@ -1109,10 +1091,6 @@ class ComparativeRewards(BeeBehavior):
 
             dx = random_plant.pos[0] - self.bee.pos[0]
             dy = random_plant.pos[1] - self.bee.pos[1]
-            hop_dist = math.hypot(dx, dy)
-            self.bee.last_jump_length = float(hop_dist)
-            self.bee.is_long_jump = bool(hop_dist > self.LONG_JUMP_THRESHOLD)
-            
             theta_to_flower = math.degrees(math.atan2(dy, dx))
 
             if theta_to_flower > 180:
@@ -1154,8 +1132,6 @@ class ComparativeRewards(BeeBehavior):
 
         is_long_jump = distance > self.LONG_JUMP_THRESHOLD
 
-        self.bee.last_jump_length = float(distance)
-        self.bee.is_long_jump = bool(is_long_jump)
         ########### Debugging and Verification ###########
         self.bee.jump_distances.append(distance)
         ##################################################
@@ -1347,11 +1323,6 @@ class NearestFlower(BeeBehavior):
 
                     dx = target.pos[0] - self.bee.pos[0]
                     dy = target.pos[1] - self.bee.pos[1]
-                                        
-                    hop_dist = math.hypot(dx, dy)
-                    self.bee.last_jump_length = float(hop_dist)
-                    self.bee.is_long_jump = bool(hop_dist > self.LONG_JUMP_THRESHOLD)
-                    
                     theta_to_flower = math.degrees(math.atan2(dy, dx))
                     theta_to_flower = (theta_to_flower + 180) % 360 - 180
                     self.bee.theta = theta_to_flower
@@ -1447,10 +1418,6 @@ class NearestFlower(BeeBehavior):
 
             dx = target.pos[0] - self.bee.pos[0]
             dy = target.pos[1] - self.bee.pos[1]
-            hop_dist = math.hypot(dx, dy)
-            self.bee.last_jump_length = float(hop_dist)
-            self.bee.is_long_jump = bool(hop_dist > self.LONG_JUMP_THRESHOLD)
-            
             theta_to_flower = math.degrees(math.atan2(dy, dx))
 
             if theta_to_flower > 180:
@@ -1491,8 +1458,7 @@ class NearestFlower(BeeBehavior):
             distance += self.LONG_JUMP_THRESHOLD
 
         is_long_jump = distance > self.LONG_JUMP_THRESHOLD
-        self.bee.last_jump_length = float(distance)
-        self.bee.is_long_jump = bool(is_long_jump)
+
         ########### Debugging and Verification ###########
         self.bee.jump_distances.append(distance)
         ##################################################
