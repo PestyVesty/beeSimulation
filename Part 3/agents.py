@@ -1356,7 +1356,7 @@ class NearestFlower(BeeBehavior):
         bee.last_sugar_concentration = current_sugar
 
     def get_new_action(self):
-        # Same as MyBeeBehavior, except: choose NEAREST instead of random when plants available
+        # Same as MyBeeBehavior, except: choose nearest instead of random when plants available
         available_plants = self.get_available_plants(vision_range=self.bee.vision_range)
 
         if not available_plants:
@@ -1415,7 +1415,6 @@ class NearestFlower(BeeBehavior):
         return [a for a in agents_below if isinstance(a, Plant)]
 
     def get_available_plants(self, vision_range=0.7):
-        # IDENTICAL to MyBeeBehavior: do NOT filter scent; do exclude latest-visited
         neighbors = self.bee.model.space.get_neighbors(self.bee.pos, vision_range, include_center=True)
         plant_agents = [agent for agent in neighbors if isinstance(agent, Plant)]
         available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant not in self.bee.latest_visited_flowers]
