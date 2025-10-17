@@ -1,6 +1,6 @@
 import mesa
 # from agents import Bee, Plant, PureLevyBehavior, TruncatedLevyBehavior, BeeHive, CompositeLevyBehavior, BiasedCompositeLevyBehavior, MyBeeBehavior, MyBee, MyPlant
-from agents import Bee, Plant, BeeHive, MyBeeBehavior, MyBee, MyPlant, ComparativeRewards, NearestFlower
+from agents import Bee, Plant, BeeHive, MyBeeBehavior, MyBee, MyPlant, ComparativeRewards, NearestFlower, LevyFlight
 from mesa.datacollection import DataCollector
 from shapely.geometry import LineString
 import numpy as np
@@ -70,9 +70,6 @@ class OpenCoverModel(mesa.Model):
         self.datacollector.collect(self)
 
     def step(self):
-        #! Adding the following code for terminating the simulation may break animation code
-        
-
         self.agents.shuffle_do("step")
 
 
@@ -102,6 +99,11 @@ class OpenCoverModel(mesa.Model):
                     landing_prob=self.landing_prob,
                     biased_distribution=biased_distribution
                 )
+            elif self.bee_behavior == "levy_flight":
+                bee_behavior = LevyFlight(
+                    landing_prob=self.landing_prob,
+                    biased_distribution=biased_distribution
+                )
             else:
                 raise ValueError(f"Unknown or unsupported bee behavior: {self.bee_behavior}")
 
@@ -121,23 +123,23 @@ class OpenCoverModel(mesa.Model):
                 plant.on_placement()
                 self.space.place_agent(plant, (x_coord, y * row))
 
-                # # Y-axis offset
-                # plant = MyPlant(self, replenish_rate=self.replenish_rate)
-                # plant.on_placement()
-                # self.space.place_agent(plant, (x_coord, y * row + 0.2))
+                # Y-axis offset
+                plant = MyPlant(self, replenish_rate=self.replenish_rate)
+                plant.on_placement()
+                self.space.place_agent(plant, (x_coord, y * row + 0.2))
                 
-                # plant = MyPlant(self, replenish_rate=self.replenish_rate)
-                # plant.on_placement()
-                # self.space.place_agent(plant, (x_coord, y * row - 0.2))
+                plant = MyPlant(self, replenish_rate=self.replenish_rate)
+                plant.on_placement()
+                self.space.place_agent(plant, (x_coord, y * row - 0.2))
                 
-                # # X-axis offset
-                # plant = MyPlant(self, replenish_rate=self.replenish_rate)
-                # plant.on_placement()
-                # self.space.place_agent(plant, (x_coord + 0.2, y * row ))
+                # X-axis offset
+                plant = MyPlant(self, replenish_rate=self.replenish_rate)
+                plant.on_placement()
+                self.space.place_agent(plant, (x_coord + 0.2, y * row ))
                 
-                # plant = MyPlant(self, replenish_rate=self.replenish_rate)
-                # plant.on_placement()
-                # self.space.place_agent(plant, (x_coord  - 0.2, y * row))
+                plant = MyPlant(self, replenish_rate=self.replenish_rate)
+                plant.on_placement()
+                self.space.place_agent(plant, (x_coord  - 0.2, y * row))
 
 
 
