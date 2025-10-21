@@ -1186,11 +1186,23 @@ class ComparativeRewards(BeeBehavior):
 
 class NearestFlower(BeeBehavior):
     """
-    MyBeeBehavior variant:
-    - Scanning picks the nearest available flower (not in latest_visited_flowers, regardless of scent)
-    - Landing requires probability and NO scent (unchanged)
-    - Keeps reward memory + biased sampler from MyBeeBehavior
-    - CHANGED: Only record a flower in latest_visited_* after a SUCCESSFUL landing
+    MyBeeBehavior variant that picks the NEAREST flower when scanning/en-route.
+
+    Matching MyBeeBehavior scan semantics:
+      - During scans, consider plants that are:
+          * within vision,
+          * unoccupied (bee_on is None),
+          * NOT in latest_visited_flowers,
+        and DO NOT filter by scent at selection time.
+      - At landing time, require landing probability AND plant must be unscented.
+
+    Other mechanics (unchanged from MyBeeBehavior):
+      - Sugar-based reward memory update
+      - Biased truncated Lévy step with long/short-jump cycle
+      - 3-step foraging; leave scent on flower; home when full
+
+    NOTE: To mirror MyBeeBehavior exactly, we append to latest_visited_* as soon as the
+          bee finds a plant "underfoot" (before the landing attempt).
     """
 
     def __init__(self, landing_prob, biased_distribution=None):
@@ -1198,12 +1210,14 @@ class NearestFlower(BeeBehavior):
         self.START = 95
         self.END = 140
         self.BEE_IDS = [5]
-        self.biased_distribution = biased_distribution
+        self.biased_distribution = biased_distribution  # same ctor signature
 
+    # ----------------------------- MAIN STEP -----------------------------
     def step(self):
-        # 0. Homing
+        # 0) Homing
         if self.bee.homing:
             if not self.bee.travel_route:
+                # Arrived at hive
                 self.bee.homing = False
                 self.bee.nectar_in_stomach = 0.0
                 self.bee.reward_memory.clear()
@@ -1214,42 +1228,38 @@ class NearestFlower(BeeBehavior):
                 self.new_action_and_move()
                 return
             else:
-                next_coord = self.bee.travel_route.pop(0)
-                next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
-                self.bee.model.space.move_agent(self.bee, next_coord)
+                self._advance_one_step_along_route()
                 return
 
-        # 1. Not currently foraging
+        # 1) Not foraging currently
         if self.bee.forage_timer == 0 and self.bee.on_plant is None:
+
             if not self.bee.travel_route:
-                # Finished a long jump → clear cycle & pick again
+                # Finished a long jump → reset short-jump cycle
                 if self.bee.is_long_jump:
                     self.bee.is_long_jump = False
                     self.bee.reward_memory.clear()
                     self.new_action_and_move()
                     return
 
-                # Check plant directly underfoot (exact coord, as you prefer)
+                # Check plant exactly underfoot (radius=0 per your design)
                 plant_below_list = self.get_plant_below()
                 if plant_below_list:
                     plant = plant_below_list[0]
 
-                    # NOTE: CHANGED — do NOT push to latest_visited_* yet.
-                    # We only append after a successful landing.
+                    # Mirror MyBeeBehavior: record this "visited" immediately (before landing)
+                    if hasattr(self.bee, "latest_visited_flowers"):
+                        self.bee.latest_visited_flowers.append(plant)
+                    if hasattr(self.bee, "latest_visited_flowers_steps"):
+                        self.bee.latest_visited_flowers_steps.append(self.bee.model.steps)
 
                     if plant.bee_on is None and not plant.has_scent():
-                        # Try landing
+                        # Try to land (probability)
                         landing = self.land_on_flower(self.bee, plant)
                         if landing:
-                            # Successful landing → NOW record visit history (CHANGED)
                             self.bee.on_plant = plant
                             plant.bee_on = self.bee
                             plant.visit_timestamp.append(self.bee.model.steps)
-
-                            if hasattr(self.bee, "latest_visited_flowers"):
-                                self.bee.latest_visited_flowers.append(plant)
-                            if hasattr(self.bee, "latest_visited_flowers_steps"):
-                                self.bee.latest_visited_flowers_steps.append(self.bee.model.steps)
 
                             nectar_to_collect = min(
                                 self.bee.collection_rate,
@@ -1260,7 +1270,7 @@ class NearestFlower(BeeBehavior):
                             if nectar_to_collect > 0:
                                 self.bee.forage_timer = self.bee.forage_timer_max
                                 self.bee.nectar_to_collect = nectar_to_collect
-                                # reward memory as in MyBeeBehavior (sugar-based)
+                                # sugar-based reward update (same as MyBeeBehavior)
                                 self.update_reward_memory(self.bee)
                                 self.new_action_and_move()
                             elif nectar_to_collect == 0:
@@ -1272,11 +1282,11 @@ class NearestFlower(BeeBehavior):
                             else:
                                 raise ValueError("Nectar to collect should not be negative.")
                         else:
-                            # Probabilistic miss → move on (no history recorded)
+                            # Probabilistic miss → move on
                             self.new_action_and_move()
 
                     elif plant.bee_on and not plant.has_scent():
-                        # same as your logic
+                        # Preserve your original logic
                         self.bee.reward_memory.append(1)
                         self.new_action_and_move()
 
@@ -1288,35 +1298,27 @@ class NearestFlower(BeeBehavior):
                         assert False, "Unexpected landing-state combination."
 
                 else:
+                    # No plant exactly underfoot
                     self.bee.reward_memory.append(0)
                     self.new_action_and_move()
 
             else:
-                # En route: if not long-jumping and plants in range, choose the NEAREST one
-                available_plants = self.get_available_plants(vision_range=self.bee.vision_range)
-                if not self.bee.is_long_jump and available_plants:
-                    target = self.nearest_plant(available_plants)
-                    self.bee.travel_route = [target.pos]
+                # En-route: if not long-jumping, retarget to NEAREST plant in range (ignore scent at selection)
+                if not self.bee.is_long_jump:
+                    available_plants = self.get_available_plants(vision_range=self.bee.vision_range)
+                    if available_plants:
+                        target = self.nearest_plant(available_plants)
+                        self.bee.travel_route = [target.pos]
+                        self._point_heading_to(target.pos)
 
-                    dx = target.pos[0] - self.bee.pos[0]
-                    dy = target.pos[1] - self.bee.pos[1]
-                    theta_to_flower = math.degrees(math.atan2(dy, dx))
-                    theta_to_flower = (theta_to_flower + 180) % 360 - 180
-                    self.bee.theta = theta_to_flower
+                # Continue along path
+                self._advance_one_step_along_route()
 
-                    next_coord = self.bee.travel_route.pop(0)
-                    next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
-                    self.bee.model.space.move_agent(self.bee, next_coord)
-                    return
-                else:
-                    next_coord = self.bee.travel_route.pop(0)
-                    next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
-                    self.bee.model.space.move_agent(self.bee, next_coord)
-
-        # 2. Foraging countdown
+        # 2) Foraging countdown
         elif self.bee.on_plant is not None or self.bee.forage_timer > 0:
             self.bee.forage_timer -= 1
             if self.bee.forage_timer == 0:
+                # finish foraging
                 self.bee.on_plant.nectar -= self.bee.nectar_to_collect
                 self.bee.add_nectar(self.bee.nectar_to_collect)
                 self.bee.nectar_to_collect = 0.0
@@ -1329,18 +1331,13 @@ class NearestFlower(BeeBehavior):
                     self.bee.homing = True
                     bee_path = LineString([self.bee.pos, self.bee.beehive.pos])
                     self.bee.travel_route = self.sample_line(bee_path, 0.7)
-                    dx = self.bee.beehive.pos[0] - self.bee.pos[0]
-                    dy = self.bee.beehive.pos[1] - self.bee.pos[1]
-                    theta = math.degrees(math.atan2(dy, dx))
-                    if theta > 180: theta -= 360
-                    elif theta < -180: theta += 360
-                    self.bee.theta = theta
+                    self._point_heading_to(self.bee.beehive.pos)
                 else:
                     self.new_action_and_move()
         else:
             assert False, "Defensive programming, this should not be executed"
 
-    # --- keep MyBeeBehavior’s sugar-based reward memory ---
+    # ----------------------------- REWARD MEMORY (same as MyBeeBehavior) -----------------------------
     def update_reward_memory(self, bee):
         current_sugar = bee.on_plant.sugar_concentration
         last_sugar = bee.last_sugar_concentration
@@ -1351,12 +1348,16 @@ class NearestFlower(BeeBehavior):
                 reward = 1
             else:
                 drop = (last_sugar - current_sugar) / last_sugar
-                reward = max(0, 1 - drop)
+                reward = max(0, 1 - drop)  # [0,1]
         bee.reward_memory.append(reward)
         bee.last_sugar_concentration = current_sugar
 
+    # ----------------------------- ACTION SELECTION -----------------------------
     def get_new_action(self):
-        # Same as MyBeeBehavior, except: choose nearest instead of random when plants available
+        """
+        Same long/short jump policy as MyBeeBehavior, but when plants are in range
+        choose the NEAREST available (ignore scent at selection time).
+        """
         available_plants = self.get_available_plants(vision_range=self.bee.vision_range)
 
         if not available_plants:
@@ -1369,19 +1370,12 @@ class NearestFlower(BeeBehavior):
                 else:
                     self.bee.travel_route, self.bee.is_long_jump = self.sample_from_biased_distribution(max_jump=self.LONG_JUMP_THRESHOLD)
         else:
-            target = self.nearest_plant(available_plants)  # CHANGED (nearest)
+            target = self.nearest_plant(available_plants)
             self.bee.travel_route = [target.pos]
-
-            dx = target.pos[0] - self.bee.pos[0]
-            dy = target.pos[1] - self.bee.pos[1]
-            theta_to_flower = math.degrees(math.atan2(dy, dx))
-            if theta_to_flower > 180:
-                theta_to_flower -= 360
-            elif theta_to_flower < -180:
-                theta_to_flower += 360
-            self.bee.theta = theta_to_flower
+            self._point_heading_to(target.pos)
 
     def sample_from_biased_distribution(self, max_jump=None):
+        # identical to MyBeeBehavior
         delta_theta = self.biased_distribution(self.bee.random, 1)[0]
         self.bee.turning_angles.append(delta_theta)
 
@@ -1393,11 +1387,13 @@ class NearestFlower(BeeBehavior):
         alpha = 1.5
         min_distance = 0.7
         max_distance = max_jump if max_jump is not None else 20.0
+
         while True:
             u = self.bee.random.random()
             distance = min_distance * ((1 - u) ** (-1 / alpha))
             if distance <= max_distance:
                 break
+
         if max_jump is None and distance < self.LONG_JUMP_THRESHOLD:
             distance += self.LONG_JUMP_THRESHOLD
 
@@ -1408,41 +1404,61 @@ class NearestFlower(BeeBehavior):
         bee_path = LineString([self.bee.pos, destination_coord])
         if self.bee.model.space.out_of_bounds(pos=destination_coord):
             bee_path = self.handle_wall_collisions(bee_path)
+
         return self.sample_line(bee_path, 0.7), is_long_jump
 
+    # ----------------------------- HELPERS -----------------------------
     def get_plant_below(self):
         agents_below = self.bee.model.space.get_neighbors(self.bee.pos, 0, include_center=True)
         return [a for a in agents_below if isinstance(a, Plant)]
 
     def get_available_plants(self, vision_range=0.7):
+        """
+        IDENTICAL to MyBeeBehavior: do NOT filter scent here.
+        Available = in range, no bee on it, not in latest_visited_flowers.
+        """
         neighbors = self.bee.model.space.get_neighbors(self.bee.pos, vision_range, include_center=True)
         plant_agents = [agent for agent in neighbors if isinstance(agent, Plant)]
         available_plants = [plant for plant in plant_agents if plant.bee_on is None and plant not in self.bee.latest_visited_flowers]
         return available_plants
 
     def land_on_flower(self, bee, plant):
-        return bee.random.random() < self.landing_prob and plant.has_scent() is False
+        # Landing requires probability and NO scent
+        return bee.random.random() < self.landing_prob and not plant.has_scent()
 
     def new_action_and_move(self):
         self.get_new_action()
         if self.bee.travel_route:
-            next_coord = self.bee.travel_route.pop(0)
-            next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
-            self.bee.model.space.move_agent(self.bee, next_coord)
+            self._advance_one_step_along_route()
+
+    def _advance_one_step_along_route(self):
+        next_coord = self.bee.travel_route.pop(0)
+        next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
+        self.bee.model.space.move_agent(self.bee, next_coord)
+
+    def _point_heading_to(self, target_pos):
+        dx = target_pos[0] - self.bee.pos[0]
+        dy = target_pos[1] - self.bee.pos[1]
+        theta = math.degrees(math.atan2(dy, dx))
+        self.bee.theta = (theta + 180) % 360 - 180
 
     def nearest_plant(self, plants, tol=1e-6):
+        """Return a random plant among all nearest (tied within tol) to the bee."""
         bx, by = self.bee.pos
-        # squared distances
-        d2_list = []
+        if not plants:
+            return None
+        best_d2 = float("inf")
+        ties = []
         for p in plants:
             px, py = p.pos
             d2 = (px - bx) * (px - bx) + (py - by) * (py - by)
-            d2_list.append(d2)
-        if not d2_list:
-            return None
-        min_d2 = min(d2_list)
-        tied = [p for p, d2 in zip(plants, d2_list) if abs(d2 - min_d2) <= tol]
-        return self.bee.random.choice(tied)
+            if d2 + tol < best_d2:
+                best_d2 = d2
+                ties = [p]
+            elif abs(d2 - best_d2) <= tol:
+                ties.append(p)
+        return self.bee.random.choice(ties)
+
 
 
 class LevyFlight(BeeBehavior):
