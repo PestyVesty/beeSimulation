@@ -1,43 +1,72 @@
 import mesa
 # from agents import Bee, Plant, PureLevyBehavior, TruncatedLevyBehavior, BeeHive, CompositeLevyBehavior, BiasedCompositeLevyBehavior, MyBeeBehavior, MyBee, MyPlant
-from agents import Bee, Plant, BeeHive, MyBeeBehavior, MyBee, MyPlant, ComparativeRewards, NearestFlower, LevyFlight
+from agents import Bee, Plant, BeeHive, MyBeeBehavior, MyBee, MyPlant, ComparativeRewards, NearestFlower, LevyFlight, TempAware
 from mesa.datacollection import DataCollector
 from shapely.geometry import LineString
 import numpy as np
 import pdf_library
+from temperature import TemperatureField
 
 class OpenCoverModel(mesa.Model):
-    def __init__(self, n_agents=60, seed=None, bee_behavior="resource_aware", landing_prob=1.0, replenish_rate=0.0, reward_size=5, interval=1):
+    def __init__(self,
+                 n_agents=60, seed=None,
+                 bee_behavior="resource_aware",
+                 landing_prob=1.0,
+                 replenish_rate=0.0,
+                 reward_size=5,
+                 interval=1,
+                 temp_enabled=False,
+                 temp_Nx=200, temp_Ny=60,
+                 T_base=22.0, S=1.0, delta_x=3.0, alpha=2, delta_y=1.0,
+                 temp_outside_policy='ambient'
+                 ):
         super().__init__(seed=seed)
 
-        self.bee_behavior = bee_behavior
-        self.landing_prob = landing_prob
-        self.n_agents = n_agents
+        self.bee_behavior   = bee_behavior
+        self.landing_prob   = landing_prob
+        self.n_agents       = n_agents
         self.replenish_rate = replenish_rate
-        self.reward_size = reward_size
+        self.reward_size    = reward_size
+        self.interval       = interval
 
-        self.interval = interval
-        
-        
-        # Initialize space
-        self.space_width = 2.85 * 4
-        self.space_length = 10 + 100 + 10
+        # --- space ---
+        self.space_width  = 2.85 * 4           # = W
+        self.space_length = 10 + 100 + 10      # total world length
         self.space = mesa.space.ContinuousSpace(self.space_length, self.space_width, False)
 
-        # Define walls
+        # --- walls (your 2-wall setup) ---
         self.walls = [
-            LineString([(0, 0), (0, self.space_width)]),
-            LineString([(0, self.space_width), (self.space_length, self.space_width)]),
-            LineString([(self.space_length, self.space_width), (self.space_length, 0)]),
-            LineString([(self.space_length, 0), (0, 0)])
+            LineString([(10, 0), (110, 0)]),
+            LineString([(10, self.space_width), (110, self.space_width)]),
         ]
 
-        # Create agents
+        # --- temperature field ---
+        self.temp_enabled = temp_enabled
+        if self.temp_enabled:
+            self.tunnel_x0 = 10.0
+            self.tunnel_L  = 100.0      
+            self.temperature = TemperatureField(
+                x0=self.tunnel_x0, L=self.tunnel_L, W=self.space_width,
+                Nx=temp_Nx, Ny=temp_Ny,
+                T_base=T_base, S=S, delta_x=delta_x, alpha=alpha, delta_y=delta_y,
+                outside_policy=temp_outside_policy
+            )
+        else:
+            self.temperature = None
+
+        # convenience helper for agents / logging
+        def _temperature_at(x, y):
+            if self.temperature is None:
+                return None
+            return self.temperature.at_world(x, y)
+        self.temperature_at = _temperature_at
+
+        # --- agents ---
         self.create_beehive_bees_agents(n_agents, (5, 2.85 * 2), my_id=0)
         self.create_beehive_bees_agents(n_agents, (15 + 100, 2.85 * 2), my_id=1)
         self.create_plant_agents()
 
-        # Set up data collector
+        # --- datacollection (adds a safe temperature column) ---
         self.datacollector = DataCollector(
             model_reporters={
                 "Step": lambda m: m.steps,
@@ -45,7 +74,7 @@ class OpenCoverModel(mesa.Model):
                 "Behavior": lambda m: m.bee_behavior,
                 "Replenish": lambda m: m.replenish_rate,
                 "RewardSize": lambda m: m.reward_size,
-                },
+            },
             agent_reporters={
                 "Position": "pos",
                 "Agent Type": "agent_type",
@@ -59,22 +88,16 @@ class OpenCoverModel(mesa.Model):
                 "Plant scent timer": lambda a: getattr(a, "scent_mark_timer", None),
                 "Bee latest visited plant": lambda a: [(float(p.pos[0]), float(p.pos[1])) for p in (getattr(a, "latest_visited_flowers", []) or []) if getattr(p, "pos", None) is not None],
                 "Bee latest visited plant step": "latest_visited_flowers_steps",
-                # "Reward window mean": lambda a: (np.mean(a.reward_memory)
-                #                                  if hasattr(a, "reward_memory") and len(a.reward_memory) == a.reward_size
-                #                                  else None),
-                # "Long jump": lambda a: getattr(a, "is_long_jump", False),     # set where you choose the step
-                # "Jump length": lambda a: getattr(a, "last_jump_length", None) # optional, for QC
+                "Local temperature": lambda a: (a.model.temperature_at(*a.pos) if hasattr(a, "pos") else None),
             }
         )
-
         self.datacollector.collect(self)
 
     def step(self):
         self.agents.shuffle_do("step")
-
-
         if self.steps % self.interval == 0:
             self.datacollector.collect(self)
+
 
     def create_beehive_bees_agents(self, n_agents, coord, my_id):
         beehive = BeeHive(self, my_id)
@@ -103,6 +126,11 @@ class OpenCoverModel(mesa.Model):
                 bee_behavior = LevyFlight(
                     landing_prob=self.landing_prob,
                     biased_distribution=biased_distribution
+                )
+            elif self.bee_behavior == "temp_aware":
+                bee_behavior = TempAware(
+                    landing_prob=self.landing_prob,
+                    biased_distribution=biased_distribution,
                 )
             else:
                 raise ValueError(f"Unknown or unsupported bee behavior: {self.bee_behavior}")

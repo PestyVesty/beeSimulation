@@ -1609,3 +1609,258 @@ class LevyFlight(BeeBehavior):
             next_coord = self.bee.travel_route.pop(0)
             next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
             self.bee.model.space.move_agent(self.bee, next_coord)
+
+
+from collections import deque
+import math
+import numpy as np
+from shapely.geometry import LineString
+
+class TempAware(MyBeeBehavior):
+    """
+    Temperature-aware version of MyBeeBehavior, with long-jump trigger on uniform picks.
+
+    Additions/Changes:
+      - opt_temp = 26.0 (°C)
+      - temp_memory = deque(maxlen=5)
+      - On ARRIVAL (travel_route just emptied), record local temperature in temp_memory
+      - On hive arrival, reset temp_memory (fresh bout)
+      - Temperature-modulated heading:
+            dev = mean(|T - opt_temp|)
+            p_biased = 1 / (1 + dev)
+        With prob p_biased -> use biased distribution; else uniform.
+      - NEW: If a UNIFORM direction is sampled, immediately set is_long_jump=True
+             before calling new_action_and_move(), so the subsequent en-route logic
+             respects the long-jump behavior.
+    """
+
+    def __init__(self, landing_prob, biased_distribution=None):
+        super().__init__(landing_prob=landing_prob, biased_distribution=biased_distribution)
+        self.opt_temp = 26.0
+        self.temp_memory = deque(maxlen=5)
+
+    # --------------------- temperature helpers ---------------------
+
+    def _read_temperature(self):
+        """Return local temperature in °C at current bee position, or None if unavailable."""
+        model = self.bee.model
+        pos = getattr(self.bee, "pos", None)
+        if pos is None or not hasattr(model, "temperature") or model.temperature is None:
+            return None
+        return model.temperature.at_world(*pos)
+
+    def _update_temp_memory_if_arrival(self):
+        """Append current local temperature when we detect ARRIVAL (travel_route just emptied)."""
+        if not self.bee.travel_route:
+            T = self._read_temperature()
+            if T is not None:
+                self.temp_memory.append(float(T))
+
+    def _comfort_score(self):
+        """
+        Mapping from recent temperatures to bias probability:
+          dev = mean(|T - opt_temp|),  p_biased = 1 / (1 + dev)
+        Default to 1.0 (favor biased) if we have no temperature evidence yet.
+        """
+        if not self.temp_memory:
+            return 1.0
+        dev = np.mean([abs(T - self.opt_temp) for T in self.temp_memory])
+        return float(1.0 / (1.0 + dev))
+
+    def _pick_theta_temperature_modulated(self):
+        """
+        Returns:
+            (theta_deg, used_uniform)
+        used_uniform=True means we sampled a uniform direction (→ long jump trigger).
+        """
+        p_biased = self._comfort_score()
+        use_biased = (self.bee.random.random() < p_biased)
+
+        if use_biased and self.biased_distribution is not None:
+            theta_deg = self.biased_distribution(self.bee.random, 1)[0]
+            theta_deg = (theta_deg + 180.0) % 360.0 - 180.0
+            return theta_deg, False  # biased
+        else:
+            theta_deg = self.bee.random.uniform(-180.0, 180.0)
+            return theta_deg, True   # uniform
+
+    def _pick_and_move_with_long_jump(self):
+        """Pick heading (temp-modulated). If uniform, mark as long jump. Then move."""
+        theta_deg, used_uniform = self._pick_theta_temperature_modulated()
+        self.theta = theta_deg
+        if used_uniform:
+            self.bee.is_long_jump = True
+        self.new_action_and_move()
+
+    # --------------------- main step (MyBeeBehavior flow + temp) ---------------------
+
+    def step(self):
+
+        # 0) Homing branch
+        if self.bee.homing:
+            if not self.bee.travel_route:
+                # Arrived at hive
+                self.bee.homing = False
+                self.bee.nectar_in_stomach = 0.0
+
+                # reset short-term memories for a fresh bout
+                self.bee.reward_memory.clear()
+                self.temp_memory.clear()  # NEW
+                self.bee.latest_visited_flowers.clear()
+                self.bee.latest_visited_flowers_steps.clear()
+
+                self.theta = None
+                self.bee.last_sugar_concentration = None
+
+                # Choose next heading (optional at hive) — long jump if uniform
+                self._pick_and_move_with_long_jump()
+                return
+            else:
+                # Continue to hive
+                next_coord = self.bee.travel_route.pop(0)
+                next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
+                self.bee.model.space.move_agent(self.bee, next_coord)
+                return
+
+        # 1) Not currently foraging on plant
+        if self.bee.forage_timer == 0 and self.bee.on_plant is None:
+
+            # 2) At destination? (travel_route empty)
+            if not self.bee.travel_route:
+
+                # Record temperature at arrival
+                self._update_temp_memory_if_arrival()
+
+                # Long-jump arrival handling
+                if self.bee.is_long_jump:
+                    self.bee.is_long_jump = False
+                    self.bee.reward_memory.clear()
+
+                    # temp-modulated next heading; trigger long jump if uniform
+                    self._pick_and_move_with_long_jump()
+                    return
+
+                # Check plant below
+                plant_below_list = self.get_plant_below()
+                if plant_below_list:
+                    plant = plant_below_list[0]
+                    self.bee.latest_visited_flowers.append(plant)
+                    self.bee.latest_visited_flowers_steps.append(self.bee.model.steps)
+
+                    if plant.bee_on is None and not plant.has_scent():
+
+                        landing = self.land_on_flower(self.bee, plant)
+
+                        if landing:
+                            self.bee.on_plant = plant
+                            plant.bee_on = self.bee
+                            plant.visit_timestamp.append(self.bee.model.steps)
+
+                            nectar_to_collect = min(
+                                self.bee.collection_rate,
+                                plant.nectar,
+                                self.bee.stomach_capacity - self.bee.nectar_in_stomach
+                            )
+
+                            if nectar_to_collect > 0:
+                                self.bee.forage_timer = self.bee.forage_timer_max
+                                self.bee.nectar_to_collect = nectar_to_collect
+
+                                # success update
+                                self.update_reward_memory(self.bee)
+
+                                # queue next direction after foraging; long jump if uniform
+                                self._pick_and_move_with_long_jump()
+
+                            elif nectar_to_collect == 0:
+                                self.bee.reward_memory.append(0)
+
+                                plant.bee_on = None
+                                plant.leave_scent()
+                                self.bee.on_plant = None
+
+                                # choose next move; long jump if uniform
+                                self._pick_and_move_with_long_jump()
+
+                            else:
+                                raise ValueError("Nectar to collect should not be negative 2")
+
+                        elif not landing:
+                            # choose next move; long jump if uniform
+                            self._pick_and_move_with_long_jump()
+                        else:
+                            raise ValueError("Landing logic error 2")
+
+                    elif plant.bee_on and not plant.has_scent():
+                        self.bee.reward_memory.append(1)
+                        self._pick_and_move_with_long_jump()
+
+                    elif plant.has_scent():
+                        self.bee.reward_memory.append(0)
+                        self._pick_and_move_with_long_jump()
+
+                    else:
+                        assert False, "Defensive programming 1, different reason why bee cannot land"
+
+                elif not plant_below_list:
+                    self.bee.reward_memory.append(0)
+                    self._pick_and_move_with_long_jump()
+                else:
+                    assert False, "Plant below detection problem"
+
+            else:
+                # 2.2) En route
+                available_plants = self.get_available_plants(vision_range=self.bee.vision_range)
+
+                if not self.bee.is_long_jump and available_plants:
+                    random_plant = self.bee.random.choice(available_plants)
+                    self.bee.travel_route = [random_plant.pos]
+
+                    dx = random_plant.pos[0] - self.bee.pos[0]
+                    dy = random_plant.pos[1] - self.bee.pos[1]
+                    theta_to_flower = math.degrees(math.atan2(dy, dx))
+                    theta_to_flower = (theta_to_flower + 180) % 360 - 180
+                    self.bee.theta = theta_to_flower
+
+                    next_coord = self.bee.travel_route.pop(0)
+                    next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
+                    self.bee.model.space.move_agent(self.bee, next_coord)
+                    return
+
+                else:
+                    next_coord = self.bee.travel_route.pop(0)
+                    next_coord = self.clamp_position(next_coord, self.bee.model.space.width, self.bee.model.space.height)
+                    self.bee.model.space.move_agent(self.bee, next_coord)
+
+        # 1.2) Currently foraging
+        elif self.bee.on_plant is not None or self.bee.forage_timer > 0:
+            self.bee.forage_timer -= 1
+
+            if self.bee.forage_timer == 0:  # finished foraging
+                self.bee.on_plant.nectar -= self.bee.nectar_to_collect
+                self.bee.add_nectar(self.bee.nectar_to_collect)
+
+                self.bee.nectar_to_collect = 0.0
+
+                self.bee.on_plant.bee_on = None
+                self.bee.on_plant.leave_scent()
+                self.bee.on_plant = None
+
+                if self.bee.is_full():
+                    self.bee.homing = True
+                    bee_path = LineString([self.bee.pos, self.bee.beehive.pos])
+                    self.bee.travel_route = self.sample_line(bee_path, 0.7)
+
+                    dx = self.bee.beehive.pos[0] - self.bee.pos[0]
+                    dy = self.bee.beehive.pos[1] - self.bee.pos[1]
+                    theta = math.degrees(math.atan2(dy, dx))
+                    if theta > 180:
+                        theta -= 360
+                    elif theta < -180:
+                        theta += 360
+                    self.bee.theta = theta
+                else:
+                    # pick next heading; long jump if uniform
+                    self._pick_and_move_with_long_jump()
+        else:
+            assert False, "Defensive programming, this should not be executed"
