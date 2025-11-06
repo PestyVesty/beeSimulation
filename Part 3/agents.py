@@ -355,8 +355,9 @@ class BeeHive(mesa.Agent):
         self.agent_type = "beehive"
         self.model = model
         self.pos = None
-        self.my_id = my_id # TODO: Check if this is needed, or if it should be removed (creating new agents in mesa should just assign a unique ID). If so, the go back to model.py and edit the code.
-
+        self.my_id = my_id
+        self.nectar_amount = 0.0
+        
     def color_code(self):
         return {"color": "brown", "edgecolors": "none"}
 
@@ -536,7 +537,9 @@ class MyBeeBehavior(BeeBehavior):
                 
                 # Arrived at hive
                 self.bee.homing = False
-                self.bee.nectar_in_stomach = 0.0
+
+                self.bee.beehive.nectar_amount += self.bee.nectar_in_stomach
+                self.bee.nectar_in_stomach = 0.0                
                 self.bee.reward_memory.clear()
                 self.bee.latest_visited_flowers.clear()
                 self.bee.latest_visited_flowers_steps.clear()
@@ -874,7 +877,9 @@ class ComparativeRewards(BeeBehavior):
             if not self.bee.travel_route:
                 # Arrived at hive
                 self.bee.homing = False
+                self.bee.beehive.nectar_amount += self.bee.nectar_in_stomach
                 self.bee.nectar_in_stomach = 0.0
+
                 self.bee.reward_memory.clear()
                 self.bee.latest_visited_flowers.clear()
                 self.bee.latest_visited_flowers_steps.clear()
@@ -1219,7 +1224,9 @@ class NearestFlower(BeeBehavior):
             if not self.bee.travel_route:
                 # Arrived at hive
                 self.bee.homing = False
+                self.bee.beehive.nectar_amount += self.bee.nectar_in_stomach
                 self.bee.nectar_in_stomach = 0.0
+
                 self.bee.reward_memory.clear()
                 self.bee.latest_visited_flowers.clear()
                 self.bee.latest_visited_flowers_steps.clear()
@@ -1479,7 +1486,9 @@ class LevyFlight(BeeBehavior):
             if not self.bee.travel_route:
                 self.bee.homing = False
                 if hasattr(self.bee, "nectar_in_stomach"):
+                    self.bee.beehive.nectar_amount += self.bee.nectar_in_stomach
                     self.bee.nectar_in_stomach = 0.0
+
                 self.bee.theta = None
                 if hasattr(self.bee, "last_sugar_concentration"):
                     self.bee.last_sugar_concentration = None
@@ -1701,6 +1710,7 @@ class TempAware(MyBeeBehavior):
             if not self.bee.travel_route:
                 # Arrived at hive
                 self.bee.homing = False
+                self.bee.beehive.nectar_amount += self.bee.nectar_in_stomach
                 self.bee.nectar_in_stomach = 0.0
 
                 # reset short-term memories for a fresh bout

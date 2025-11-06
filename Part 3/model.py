@@ -89,6 +89,7 @@ class OpenCoverModel(mesa.Model):
                 "Bee latest visited plant": lambda a: [(float(p.pos[0]), float(p.pos[1])) for p in (getattr(a, "latest_visited_flowers", []) or []) if getattr(p, "pos", None) is not None],
                 "Bee latest visited plant step": "latest_visited_flowers_steps",
                 "Local temperature": lambda a: (a.model.temperature_at(*a.pos) if hasattr(a, "pos") else None),
+                "Hive nectar": lambda a: getattr(a, "nectar_amount", None),            
             }
         )
         self.datacollector.collect(self)
