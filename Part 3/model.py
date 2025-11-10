@@ -17,7 +17,7 @@ class OpenCoverModel(mesa.Model):
                  interval=1,
                  temp_enabled=False,
                  temp_Nx=200, temp_Ny=60,
-                 T_base=22.0, S=1.0, delta_x=3.0, alpha=2, delta_y=1.0,
+                 T_base=24.0, S=1.0, delta_x=5.0, alpha=1, delta_y=1.0,
                  temp_outside_policy='ambient'
                  ):
         super().__init__(seed=seed)
