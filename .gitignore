@@ -1,12 +1,13 @@
+.venv/
+.pytest_cache/
+*.egg-info/
+**/__pycache__/
+**/*.ipynb_checkpoints/
+
+outputs/
+*.pkl
+*.csv
+*.html
+*.gif
+
 temp.ipynb
-**/__pycache__
-**/*.pkl
-**/*.ipynb_checkpoints
-**/*.html
-**/*.gif
-Part 3 reward memory
-Part 3 Refactor
-scenario_greenhouse
-scenario_openCover
-Part 3 Refactor_v1
-Part 3_v1
